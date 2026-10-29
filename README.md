@@ -43,6 +43,8 @@ All providers return split- and dividend-adjusted daily bars. The app fetches ~6
 
 **"Stocks in an uptrend" (home page):** scans the curated list in `src/lib/data/symbolIndex.ts` (~170 well-known US stocks and ETFs — not the whole market, since analyzing thousands of tickers isn't practical on a free data plan) and lists the ones currently in a confirmed uptrend, strongest first. Computed with limited concurrency and cached for `SCAN_CACHE_TTL_SECONDS` (default 1800s). See `src/lib/screener.ts`.
 
+**Volatility movers (`/movers`):** same curated list, filtered to stocks whose 14-day ATR is at or above `MOVERS_ATR_THRESHOLD_PCT` (default 5%) of price, split into "bullish" and "bearish" by trend direction. This is a measure of *historical* typical daily range, explicitly not a prediction that any stock will move that much today — the page copy says so directly. See `getVolatilityMovers` in `src/lib/screener.ts`. If you ever turn this into something that reads more like a trading signal (specific price targets, "buy/short now" language), talk to a securities lawyer first — see the compliance section below.
+
 **Licensing:** before launching publicly, confirm your data plan allows *redistribution / display to end users*. Most free and personal tiers do not, and exchanges charge separate display fees for real-time data. End-of-day data is usually the cheapest path.
 
 Adding another provider: implement `MarketDataProvider` (`src/lib/data/provider.ts`) and register it in `src/lib/data/index.ts`.

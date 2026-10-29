@@ -43,6 +43,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Logo />
               PrakashAnalyser
             </Link>
+            <nav className="site-nav" aria-label="Main">
+              <Link href="/movers">Movers</Link>
+            </nav>
             <div className="search">
               <TickerSearch compact />
             </div>

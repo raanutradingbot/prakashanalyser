@@ -3,7 +3,7 @@ import { getAnalysis } from "./service";
 import { getProvider } from "./data";
 import { SYMBOL_INDEX } from "./data/symbolIndex";
 import { TtlCache } from "./cache";
-import type { TrendSummary } from "./types";
+import type { Bar, TrendSummary } from "./types";
 
 export interface ScanHit {
   symbol: string;
@@ -14,9 +14,31 @@ export interface ScanHit {
   strength: TrendSummary["strength"];
 }
 
+export interface MoverHit {
+  symbol: string;
+  name: string;
+  close: number;
+  changePct: number;
+  /** ATR(14) as % of price — typical daily range, the basis for the 5% threshold. Not a prediction. */
+  atrPct: number;
+  /** How many of the last 20 sessions closed up/down 5%+ — historical fact, not a forecast. */
+  bigMoveDays: number;
+  trendScore: number;
+  strength: TrendSummary["strength"];
+}
+
+export interface MoversResult {
+  bullish: MoverHit[];
+  bearish: MoverHit[];
+  atrThresholdPct: number;
+}
+
 const ttl = Number(process.env.SCAN_CACHE_TTL_SECONDS || 1800) * 1000;
 const cache = new TtlCache<ScanHit[]>(ttl, 10);
+const moversCache = new TtlCache<MoversResult>(ttl, 10);
 const CONCURRENCY = 8;
+const ATR_THRESHOLD_PCT = Number(process.env.MOVERS_ATR_THRESHOLD_PCT || 5);
+const BIG_MOVE_LOOKBACK_DAYS = 20;
 
 /**
  * Scans the curated symbol list (src/lib/data/symbolIndex.ts) and returns the
@@ -56,6 +78,76 @@ export async function getTopUptrends(limit = 100): Promise<ScanHit[]> {
 
   cache.set(key, result);
   return result;
+}
+
+/**
+ * Scans the curated symbol list for stocks with technical setups historically
+ * associated with large daily moves: ATR(14) at or above `ATR_THRESHOLD_PCT`
+ * of price, split by trend direction into "bullish" (upside breakout watch)
+ * and "bearish" (downside breakdown watch) buckets. This is NOT a prediction
+ * that any of these will move 5%+ today — no technical or fundamental model
+ * can honestly promise that. It's a measure of typical recent daily range
+ * (ATR) plus how often that's actually happened recently (bigMoveDays),
+ * surfaced so a trader can decide what's worth a closer look.
+ */
+export async function getVolatilityMovers(limit = 50): Promise<MoversResult> {
+  const provider = getProvider();
+  const key = `${provider.id}:movers`;
+  const hit = moversCache.get(key);
+  if (hit) return hit;
+
+  const universe = dedupe(SYMBOL_INDEX);
+  const hits = await mapWithConcurrency(universe, CONCURRENCY, async (entry) => {
+    try {
+      const r = await getAnalysis(entry.symbol, "3M");
+      if (r.atrPct == null || r.atrPct < ATR_THRESHOLD_PCT) return null;
+      if (r.trend.direction === "sideways" || r.trend.strength === "weak") return null;
+
+      const moverHit: MoverHit = {
+        symbol: r.symbol,
+        name: entry.name,
+        close: r.lastBar.close,
+        changePct: r.change.pct,
+        atrPct: r.atrPct,
+        bigMoveDays: countBigMoveDays(r.bars, ATR_THRESHOLD_PCT),
+        trendScore: r.trend.score,
+        strength: r.trend.strength,
+      };
+      return { direction: r.trend.direction, hit: moverHit };
+    } catch {
+      return null;
+    }
+  });
+
+  const bullish: MoverHit[] = [];
+  const bearish: MoverHit[] = [];
+  for (const h of hits) {
+    if (!h) continue;
+    (h.direction === "uptrend" ? bullish : bearish).push(h.hit);
+  }
+  bullish.sort((a, b) => b.atrPct - a.atrPct);
+  bearish.sort((a, b) => b.atrPct - a.atrPct);
+
+  const result: MoversResult = {
+    bullish: bullish.slice(0, limit),
+    bearish: bearish.slice(0, limit),
+    atrThresholdPct: ATR_THRESHOLD_PCT,
+  };
+  moversCache.set(key, result);
+  return result;
+}
+
+/** Counts sessions in the last `BIG_MOVE_LOOKBACK_DAYS` with |day-over-day change| >= thresholdPct. */
+function countBigMoveDays(bars: Bar[], thresholdPct: number): number {
+  const recent = bars.slice(-BIG_MOVE_LOOKBACK_DAYS - 1);
+  let count = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const prev = recent[i - 1]!.close;
+    const curr = recent[i]!.close;
+    const pct = Math.abs(((curr - prev) / prev) * 100);
+    if (pct >= thresholdPct) count++;
+  }
+  return count;
 }
 
 function dedupe<T extends { symbol: string }>(list: T[]): T[] {

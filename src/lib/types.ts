@@ -75,6 +75,8 @@ export interface AnalysisResult {
   periodChangePct: number;
   high52w: number | null;
   low52w: number | null;
+  /** ATR(14) as a percentage of the last close — a measure of typical daily range, not a prediction. */
+  atrPct: number | null;
   trend: TrendSummary;
   signals: Signal[];
   levels: Level[];

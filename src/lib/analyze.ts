@@ -118,6 +118,7 @@ export function analyze(
     periodChangePct: round(((price - first.close) / first.close) * 100),
     high52w,
     low52w,
+    atrPct: atrNow != null ? round((atrNow / price) * 100) : null,
     trend,
     signals,
     levels: levels.map((l) => ({ ...l, price: round(l.price) })),
