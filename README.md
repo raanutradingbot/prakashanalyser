@@ -1,0 +1,140 @@
+# PrakashAnalyser (US)
+
+Ticker-based technical trend analysis for **US-listed stocks and ETFs**. Type a symbol (AAPL, SPY, BRK.B…) and get:
+
+- **A trend verdict** — uptrend / downtrend / sideways, a −100…+100 score, and the plain-English reasons behind it
+- **An interactive chart** — daily candles, 20/50/200-day averages, volume, RSI, support and resistance lines, pattern markers
+- **Indicator readings** — moving-average stack, RSI(14), MACD(12,26,9), Bollinger %B, ATR volatility, relative volume, 52-week position
+- **Key levels** — support and resistance found from repeated swing turns, ranked by touches and recency
+- **Candlestick patterns** — doji, hammer / hanging man, shooting star / inverted hammer, engulfing, morning / evening star, three soldiers / crows
+- **Optional AI summary** — a short plain-English write-up of the readings (Claude), off unless you add a key
+
+The analysis engine is plain TypeScript with no external TA library, and is unit-tested.
+
+## Quick start
+
+```bash
+npm install
+cp .env.example .env.local      # works as-is with synthetic demo data
+npm run dev                      # http://localhost:3000
+```
+
+Run the checks:
+
+```bash
+npm test          # 24 unit tests (indicators, trend, levels, patterns, providers, symbols)
+npm run typecheck
+npm run build
+```
+
+## Market data
+
+Set `DATA_PROVIDER` in `.env.local`:
+
+| Provider | `DATA_PROVIDER` | Keys | Notes |
+|---|---|---|---|
+| Demo | `demo` | none | Deterministic synthetic prices per ticker, for development and demos. **Not real data.** |
+| Alpaca | `alpaca` | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | Free tier uses the IEX feed (prices fine, volume is IEX-only). Set `ALPACA_FEED=sip` on a paid plan for full consolidated volume. |
+| Polygon.io / Massive | `polygon` | `POLYGON_API_KEY` | Split/dividend adjusted daily aggregates. Override `POLYGON_BASE_URL` if you use the newer Massive host. |
+
+All providers return split- and dividend-adjusted daily bars. The app fetches ~6.5 years once per ticker (cached for `CACHE_TTL_SECONDS`) so every chart range shares one request and the 200-day average is valid from the first visible bar.
+
+**Latest news:** each ticker page shows the 5 most recent headlines (cached for `NEWS_CACHE_TTL_SECONDS`, default 900s). Alpaca and Polygon both return real headlines with a link to the source; demo mode shows clearly-labeled synthetic placeholders instead of real news.
+
+**"Stocks in an uptrend" (home page):** scans the curated list in `src/lib/data/symbolIndex.ts` (~170 well-known US stocks and ETFs — not the whole market, since analyzing thousands of tickers isn't practical on a free data plan) and lists the ones currently in a confirmed uptrend, strongest first. Computed with limited concurrency and cached for `SCAN_CACHE_TTL_SECONDS` (default 1800s). See `src/lib/screener.ts`.
+
+**Licensing:** before launching publicly, confirm your data plan allows *redistribution / display to end users*. Most free and personal tiers do not, and exchanges charge separate display fees for real-time data. End-of-day data is usually the cheapest path.
+
+Adding another provider: implement `MarketDataProvider` (`src/lib/data/provider.ts`) and register it in `src/lib/data/index.ts`.
+
+## AI summary (optional)
+
+Set `ANTHROPIC_API_KEY` (and optionally `AI_MODEL`, default `claude-sonnet-5-5`). The result page then streams a short summary under the indicators. The prompt (`src/lib/ai.ts`) restricts the model to the computed readings and forbids buy/sell/hold language. Summaries are cached for 6 hours per ticker, range and trading day.
+
+## API
+
+```
+GET /api/analyze?symbol=AAPL&range=1Y&ai=1
+```
+
+`range` is one of `3M 6M 1Y 2Y 5Y` (default `1Y`). Returns the full `AnalysisResult` JSON (see `src/lib/types.ts`). Rate-limited per IP (`RATE_LIMIT_PER_MINUTE`, default 30). Errors are `{ "error": "..." }` with 400 (bad ticker), 404 (unknown ticker), 429, 503 or 500.
+
+## How the trend score works
+
+`src/lib/trend.ts` — each factor votes between −1 and +1 and is weighted:
+
+| Factor | Weight |
+|---|---|
+| Price vs 50-day average (scaled by distance in ATRs) | 1.5 |
+| Price vs 200-day average (scaled by distance in ATRs) | 1.5 |
+| 50-day vs 200-day (golden / death cross state) | 1.0 |
+| 20-day vs 50-day | 0.5 |
+| Slope of the 50-day average | 1.5 |
+| Regression slope of price, last 50 sessions | 1.0 |
+| MACD line and histogram | 1.0 |
+| RSI(14) distance from 50 | 1.0 |
+| Swing structure (higher highs/lows vs lower) | 1.0 |
+
+Score = weighted average × 100. ≥ +25 is an uptrend, ≤ −25 a downtrend, otherwise sideways; |score| ≥ 40 is moderate and ≥ 65 strong. Tune weights and thresholds there; the tests in `tests/analysis.test.ts` will tell you if a change breaks the basic cases.
+
+## Project layout
+
+```
+src/
+  app/
+    page.tsx                  home: search, popular tickers, live SPY reading
+    analyze/[symbol]/page.tsx result page (the "show result" screen)
+    api/analyze/route.ts      JSON API
+  components/                 chart (lightweight-charts), ruler, ladder, tables
+  lib/
+    indicators.ts             SMA, EMA, RSI, MACD, Bollinger, ATR, slope
+    levels.ts                 swing pivots → support/resistance clusters
+    patterns.ts               candlestick pattern detectors
+    trend.ts                  trend scoring and reasons
+    analyze.ts                orchestrates everything into an AnalysisResult
+    service.ts                fetch + cache + analyze + AI (server only)
+    data/                     alpaca, polygon, demo providers
+tests/                        vitest unit tests
+```
+
+## Deploy
+
+**Vercel:** import the repo, add the env vars, deploy. No other setup.
+
+**Docker:**
+
+```bash
+docker build -t prakash-analyser .
+docker run -p 3000:3000 --env-file .env.local prakash-analyser
+```
+
+The in-memory cache and rate limiter are per instance. When you run more than one instance, move them to Redis (e.g. Upstash) — both live in `src/lib/cache.ts`.
+
+**Oracle Cloud (Always Free):** full step-by-step runbook in `DEPLOY_ORACLE.md` — account signup, VM creation, firewall rules, a free domain, and `docker-compose.yml` + `Caddyfile` (included) for automatic HTTPS.
+
+## Desktop app (Windows / macOS / Linux)
+
+An Electron wrapper around the same production build used for Docker/Oracle — see `DESKTOP.md`. Quick start: `npm run desktop:install && npm run desktop`.
+
+## Android app (Play Store)
+
+A Trusted Web Activity (real native app, not a fake wrapper) built with Google's Bubblewrap tool, using the PWA manifest/service worker already set up in `src/app/manifest.ts` and `public/sw.js`. Needs the site live on HTTPS first — full steps in `ANDROID.md`.
+
+## US compliance notes (not legal advice)
+
+The app is built to stay in "general, impersonal market information" territory, which is how most US charting and screening tools avoid registering as investment advisers:
+
+- No buy/sell/hold recommendations, price targets or personalized suggestions — readings are "bullish / bearish / neutral" descriptions of indicators.
+- The same output for everyone; nothing is tailored to a user's finances.
+- A clear disclaimer on every page (footer in `src/app/layout.tsx`).
+- The AI prompt forbids recommendation language.
+
+If you add personalized features (portfolio-based suggestions, alerts that say "buy now", paid signal groups, auto-trading), talk to a US securities lawyer first about SEC/state investment-adviser rules and FINRA communications rules. Also review your data vendor's display terms, add a privacy policy and terms of service, and handle accessibility (the UI targets WCAG AA: keyboard focus, contrast, reduced motion).
+
+## Suggested next steps
+
+- Ticker autocomplete with company names (Alpaca `/v2/assets` or Polygon `/v3/reference/tickers`)
+- Accounts, watchlists and email alerts when a trend flips
+- Weekly bars for 2Y/5Y, intraday timeframes on paid data
+- Sector and index comparison (relative strength vs SPY)
+- Stripe subscriptions for premium features

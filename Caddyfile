@@ -1,0 +1,6 @@
+## Replace with your real domain (or free DuckDNS subdomain) once you have
+## one. Until then this won't get a valid cert and HTTPS won't work — see
+## DEPLOY_ORACLE.md.
+your-domain.example.com {
+	reverse_proxy app:3000
+}

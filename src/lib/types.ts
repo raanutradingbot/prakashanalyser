@@ -1,0 +1,91 @@
+/** One daily (or weekly) OHLCV bar. `time` is a YYYY-MM-DD string in US/Eastern trading-date terms. */
+export interface Bar {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export type Range = "3M" | "6M" | "1Y" | "2Y" | "5Y";
+export const RANGES: Range[] = ["3M", "6M", "1Y", "2Y", "5Y"];
+
+export type TrendDirection = "uptrend" | "downtrend" | "sideways";
+export type Bias = "bullish" | "bearish" | "neutral";
+
+export interface Signal {
+  name: string;
+  value: string;
+  bias: Bias;
+  note: string;
+}
+
+export interface Level {
+  price: number;
+  kind: "support" | "resistance";
+  touches: number;
+  /** 0–1, combines touches and recency */
+  strength: number;
+  distancePct: number;
+}
+
+export interface PatternHit {
+  time: string;
+  name: string;
+  bias: Bias;
+  description: string;
+}
+
+export interface SymbolHit {
+  symbol: string;
+  name: string;
+}
+
+export interface NewsItem {
+  headline: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+  summary?: string;
+}
+
+export interface TrendSummary {
+  direction: TrendDirection;
+  /** -100 (strongly bearish) … +100 (strongly bullish) */
+  score: number;
+  strength: "weak" | "moderate" | "strong";
+  headline: string;
+  /** Each factor's explanation and its vote (-1 bearish … +1 bullish). */
+  reasons: { text: string; vote: number }[];
+}
+
+export interface SeriesPoint {
+  time: string;
+  value: number;
+}
+
+export interface AnalysisResult {
+  symbol: string;
+  range: Range;
+  provider: string;
+  generatedAt: string;
+  lastBar: Bar;
+  change: { abs: number; pct: number };
+  periodChangePct: number;
+  high52w: number | null;
+  low52w: number | null;
+  trend: TrendSummary;
+  signals: Signal[];
+  levels: Level[];
+  patterns: PatternHit[];
+  bars: Bar[];
+  overlays: {
+    sma20: SeriesPoint[];
+    sma50: SeriesPoint[];
+    sma200: SeriesPoint[];
+  };
+  rsi: SeriesPoint[];
+  aiSummary?: string | null;
+  news?: NewsItem[] | null;
+}

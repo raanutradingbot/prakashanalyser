@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "3000"
+    env_file:
+      - .env.local
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+
+  # Reverse proxy that gets HTTPS for free (automatic Let's Encrypt
+  # certificates, auto-renewed) — point your domain's DNS A record at this
+  # server's public IP, set it in Caddyfile, and Caddy does the rest.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

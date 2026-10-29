@@ -1,0 +1,44 @@
+{
+  "name": "prakash-analyser-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PrakashAnalyser desktop app (Electron wrapper around the Next.js standalone build)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "dist:all": "electron-builder --win --mac --linux"
+  },
+  "devDependencies": {
+    "electron": "^39.2.1",
+    "electron-builder": "^26.0.19"
+  },
+  "build": {
+    "appId": "com.prakashanalyser.desktop",
+    "productName": "PrakashAnalyser",
+    "icon": "build/icon.png",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": ["main.js", "package.json"],
+    "extraResources": [{ "from": "../.next/standalone", "to": "standalone" }],
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.finance"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Finance"
+    }
+  }
+}

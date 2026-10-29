@@ -1,0 +1,23 @@
+node_modules
+.next
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+coverage
+desktop/node_modules
+desktop/dist
+android/.gradle
+android/app/build
+android/key.properties
+
+# Signing keys / secrets — never commit these, regardless of location.
+*.jks
+*.keystore
+*.p12
+*.pem
+!public/**/*.pem
+
+# OS junk
+.DS_Store
+Thumbs.db
