@@ -1,0 +1,16 @@
+{
+  "name": "prakash-analyser-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android TWA project generator/builder scripts for PrakashAnalyser (see ../ANDROID.md)",
+  "scripts": {
+    "generate": "node generate.cjs",
+    "build": "bash run-build.sh"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@bubblewrap/cli": "^1.27.0",
+    "@bubblewrap/core": "^1.27.0"
+  }
+}

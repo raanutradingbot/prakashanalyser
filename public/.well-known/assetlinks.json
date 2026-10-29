@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.prakashanalyser.twa",
+      "sha256_cert_fingerprints": [
+        "28:B3:AF:4C:6C:A7:F5:E1:FB:F2:0E:2D:F4:76:59:75:55:C4:13:26:0C:15:53:02:E9:0E:D2:73:22:DF:BF:DF"
+      ]
+    }
+  }
+]

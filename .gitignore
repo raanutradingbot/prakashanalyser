@@ -9,7 +9,12 @@ desktop/node_modules
 desktop/dist
 android/.gradle
 android/app/build
+android/build
 android/key.properties
+android/local.properties
+android/*.apk
+android/*.apk.idsig
+android/*.aab
 
 # Signing keys / secrets — never commit these, regardless of location.
 *.jks
