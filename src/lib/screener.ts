@@ -56,6 +56,7 @@ export async function getTopUptrends(limit = 100): Promise<ScanHit[]> {
   const hits = await mapWithConcurrency(universe, CONCURRENCY, async (entry) => {
     try {
       const r = await getAnalysis(entry.symbol, "3M");
+      if (!isSaneResult(entry.symbol, r.symbol, r.change.pct)) return null;
       if (r.trend.direction !== "uptrend") return null;
       const scanHit: ScanHit = {
         symbol: r.symbol,
@@ -100,8 +101,26 @@ export async function getVolatilityMovers(limit = 50): Promise<MoversResult> {
   const hits = await mapWithConcurrency(universe, CONCURRENCY, async (entry) => {
     try {
       const r = await getAnalysis(entry.symbol, "3M");
+      if (!isSaneResult(entry.symbol, r.symbol, r.change.pct)) return null;
       if (r.atrPct == null || r.atrPct < ATR_THRESHOLD_PCT) return null;
       if (r.trend.direction === "sideways" || r.trend.strength === "weak") return null;
+      // Seen once in production under full 546-symbol concurrent load: a
+      // handful of symbols came back labeled "uptrend" with a sharply
+      // negative day change (or "downtrend" with a sharply positive one) —
+      // internally contradictory, and paired with an implausible price for
+      // a known S&P 500 / Nasdaq-100 member. Root cause wasn't pinned down
+      // (didn't reproduce in isolated or batched local testing against the
+      // same API), so this rejects results with that specific contradiction
+      // as a defensive measure regardless of cause.
+      const contradicts =
+        (r.trend.direction === "uptrend" && r.change.pct < -12) ||
+        (r.trend.direction === "downtrend" && r.change.pct > 12);
+      if (contradicts) {
+        console.warn(
+          `[movers] rejecting internally-inconsistent result for ${entry.symbol}: direction=${r.trend.direction} changePct=${r.change.pct} close=${r.lastBar.close} atrPct=${r.atrPct}`,
+        );
+        return null;
+      }
 
       const moverHit: MoverHit = {
         symbol: r.symbol,
@@ -148,6 +167,25 @@ function countBigMoveDays(bars: Bar[], thresholdPct: number): number {
     if (pct >= thresholdPct) count++;
   }
   return count;
+}
+
+/**
+ * Basic sanity check applied to every scan result before it's trusted: the
+ * response actually corresponds to the symbol requested, and the day's move
+ * isn't an implausible magnitude for a known index member (real S&P 500 /
+ * Nasdaq-100 constituents essentially never move 30%+ in a single day —
+ * if one shows that, treat it as a data error, not a real reading).
+ */
+function isSaneResult(requestedSymbol: string, returnedSymbol: string, changePct: number): boolean {
+  if (requestedSymbol !== returnedSymbol) {
+    console.warn(`[screener] symbol mismatch: requested ${requestedSymbol}, got ${returnedSymbol}`);
+    return false;
+  }
+  if (Math.abs(changePct) > 30) {
+    console.warn(`[screener] rejecting implausible day change for ${requestedSymbol}: ${changePct}%`);
+    return false;
+  }
+  return true;
 }
 
 function dedupe<T extends { symbol: string }>(list: T[]): T[] {
