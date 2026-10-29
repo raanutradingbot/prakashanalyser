@@ -14,7 +14,7 @@ export default async function MoversPage() {
       <section className="movers-hero">
         <h1>Volatility movers</h1>
         <p className="lede">
-          Stocks from our list of ~170 well-known US names currently showing a 14-day Average True Range (ATR) of
+          Stocks from the S&amp;P 500 and Nasdaq-100 currently showing a 14-day Average True Range (ATR) of
           5% or more of price — a measure of how wide their typical daily range has actually been recently, split
           by trend direction.
         </p>

@@ -56,7 +56,7 @@ export default async function Home() {
             Stocks in an uptrend
           </h2>
           <p className="screener-note">
-            Scanned from our list of ~170 well-known US stocks and ETFs &mdash; not the whole market.
+            Scanned from the S&amp;P 500 and Nasdaq-100 (plus popular ETFs) &mdash; not the whole market.
           </p>
         </div>
         <Suspense fallback={<p className="empty">Scanning for uptrends&hellip; this can take a few seconds on a cold cache.</p>}>

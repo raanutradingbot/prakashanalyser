@@ -41,10 +41,10 @@ const ATR_THRESHOLD_PCT = Number(process.env.MOVERS_ATR_THRESHOLD_PCT || 5);
 const BIG_MOVE_LOOKBACK_DAYS = 20;
 
 /**
- * Scans the curated symbol list (src/lib/data/symbolIndex.ts) and returns the
- * ones currently in an uptrend, strongest first. Scanning the whole US market
- * isn't practical on a free data plan, so this covers ~170 well-known names —
- * good enough for "stocks worth a look," not a full screener.
+ * Scans the S&P 500 + Nasdaq-100 list (src/lib/data/symbolIndex.ts, ~550
+ * tickers) and returns the ones currently in an uptrend, strongest first.
+ * Scanning the whole US market (thousands of tickers) isn't practical on a
+ * free data plan, but this covers the stocks most people actually watch.
  */
 export async function getTopUptrends(limit = 100): Promise<ScanHit[]> {
   const provider = getProvider();
