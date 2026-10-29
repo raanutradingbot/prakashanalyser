@@ -49,7 +49,7 @@ const moversCache = new TtlCache<MoversResult>(ttl, 10);
 // mitigation. Slower scans, but every number has been correct across
 // repeated verification. If this changes, raise it incrementally while
 // verifying each step with scripts/debug-concurrency.mjs.
-const CONCURRENCY = 3;
+const CONCURRENCY = 1; // TEMP debug: fully sequential, to isolate whether this is concurrency-related at all
 const ATR_THRESHOLD_PCT = Number(process.env.MOVERS_ATR_THRESHOLD_PCT || 5);
 const BIG_MOVE_LOOKBACK_DAYS = 20;
 
