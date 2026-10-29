@@ -112,6 +112,8 @@ docker run -p 3000:3000 --env-file .env.local prakash-analyser
 
 The in-memory cache and rate limiter are per instance. When you run more than one instance, move them to Redis (e.g. Upstash) — both live in `src/lib/cache.ts`.
 
+**Important for any new page that fetches live data:** add `export const dynamic = "force-dynamic";`. The Dockerfile deliberately doesn't copy `.env.local` into the build image (see `.dockerignore`), so during `docker build`, `DATA_PROVIDER` is unset and silently falls back to `"demo"`. Without the dynamic export, Next.js can execute a plain (no dynamic URL param) page once during the build step and bake that demo-data result into the image — which then gets served at runtime regardless of the correct real env vars at container start. This actually happened in production for `/movers` (missing the export) while `/` (which has it) never showed the issue; root-caused by comparing values against the demo provider's deterministic synthetic output, which matched almost exactly. All current pages/routes have the export now; keep it on anything new.
+
 **Oracle Cloud (Always Free):** full step-by-step runbook in `DEPLOY_ORACLE.md` — account signup, VM creation, firewall rules, a free domain, and `docker-compose.yml` + `Caddyfile` (included) for automatic HTTPS.
 
 ## Desktop app (Windows / macOS / Linux)

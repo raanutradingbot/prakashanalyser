@@ -36,20 +36,7 @@ export interface MoversResult {
 const ttl = Number(process.env.SCAN_CACHE_TTL_SECONDS || 1800) * 1000;
 const cache = new TtlCache<ScanHit[]>(ttl, 10);
 const moversCache = new TtlCache<MoversResult>(ttl, 10);
-// Deliberately conservative. At CONCURRENCY=8, scanning the full 546-symbol
-// universe on the production server (but not reproducible in local testing
-// at the same concurrency against the same API) occasionally returned
-// internally-consistent but factually wrong data for a handful of random
-// symbols each run — e.g. AMZN at $3.72 with a plausible-looking +1.64% day
-// change, Home Depot at $45. Root cause wasn't pinned down (possibly
-// connection-reuse mixing under Node's fetch/Undici at high concurrency,
-// possibly Alpaca-side under burst load from one API key) — since the
-// corrupted data is self-consistent, no validation check can reliably catch
-// it after the fact, so this cuts concurrency hard instead as the actual
-// mitigation. Slower scans, but every number has been correct across
-// repeated verification. If this changes, raise it incrementally while
-// verifying each step with scripts/debug-concurrency.mjs.
-const CONCURRENCY = 1; // TEMP debug: fully sequential, to isolate whether this is concurrency-related at all
+const CONCURRENCY = 8;
 const ATR_THRESHOLD_PCT = Number(process.env.MOVERS_ATR_THRESHOLD_PCT || 5);
 const BIG_MOVE_LOOKBACK_DAYS = 20;
 
@@ -117,14 +104,12 @@ export async function getVolatilityMovers(limit = 50): Promise<MoversResult> {
       if (!isSaneResult(entry.symbol, r.symbol, r.change.pct)) return null;
       if (r.atrPct == null || r.atrPct < ATR_THRESHOLD_PCT) return null;
       if (r.trend.direction === "sideways" || r.trend.strength === "weak") return null;
-      // Seen once in production under full 546-symbol concurrent load: a
-      // handful of symbols came back labeled "uptrend" with a sharply
-      // negative day change (or "downtrend" with a sharply positive one) —
-      // internally contradictory, and paired with an implausible price for
-      // a known S&P 500 / Nasdaq-100 member. Root cause wasn't pinned down
-      // (didn't reproduce in isolated or batched local testing against the
-      // same API), so this rejects results with that specific contradiction
-      // as a defensive measure regardless of cause.
+      // Defense-in-depth, not the fix for anything currently known: reject
+      // results where direction and day change flatly contradict each
+      // other. The real incident this would have caught (stale demo data
+      // baked in at Docker build time showing up at runtime — see the
+      // `dynamic = "force-dynamic"` fix in page.tsx) is now fixed at its
+      // actual source, but this costs nothing to leave in as a backstop.
       const contradicts =
         (r.trend.direction === "uptrend" && r.change.pct < -12) ||
         (r.trend.direction === "downtrend" && r.change.pct > 12);

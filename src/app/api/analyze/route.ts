@@ -5,6 +5,12 @@ import { RateLimiter } from "@/lib/cache";
 import { DataProviderError } from "@/lib/data";
 import { AnalysisError } from "@/lib/analyze";
 
+// Defense-in-depth: see the comment in src/app/movers/page.tsx. This route
+// already behaved correctly throughout testing (its use of
+// req.nextUrl.searchParams already makes Next.js treat it as dynamic), but
+// there's no reason to leave it implicit.
+export const dynamic = "force-dynamic";
+
 const limiter = new RateLimiter(Number(process.env.RATE_LIMIT_PER_MINUTE || 30));
 
 /**

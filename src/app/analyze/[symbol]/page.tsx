@@ -18,6 +18,12 @@ import {
   formatDate,
 } from "@/components/ResultParts";
 
+// Defense-in-depth: see the comment in src/app/movers/page.tsx for why this
+// matters. This route has no generateStaticParams so Next.js likely never
+// had a param value to pre-render with anyway (never observed this bug
+// here), but there's no reason to leave it ambiguous.
+export const dynamic = "force-dynamic";
+
 type Params = Promise<{ symbol: string }>;
 type Search = Promise<{ range?: string }>;
 

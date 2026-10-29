@@ -3,6 +3,17 @@ import type { Metadata } from "next";
 import { getVolatilityMovers } from "@/lib/screener";
 import { MoversTable } from "@/components/Screener";
 
+// Without this, Next.js's build step can execute this page's data fetching
+// once during `next build` (inside the Docker build stage, where
+// .env.local isn't present and DATA_PROVIDER silently falls back to
+// "demo") and bake the result into the image as if it were real — this is
+// exactly what caused believable-looking but wrong prices (confirmed:
+// matched the demo provider's synthetic values almost exactly) to show up
+// in production despite DATA_PROVIDER=alpaca being set correctly at
+// container runtime. The home page already had this and never showed the
+// bug; this page didn't, and did.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Volatility movers",
   description: "US stocks with technical setups historically associated with large daily moves, split by trend direction.",

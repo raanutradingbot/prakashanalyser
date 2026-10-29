@@ -4,6 +4,9 @@ import { SYMBOL_INDEX, searchSymbolIndex } from "@/lib/data/symbolIndex";
 import { RateLimiter, TtlCache } from "@/lib/cache";
 import type { SymbolHit } from "@/lib/types";
 
+// Defense-in-depth: see the comment in src/app/movers/page.tsx.
+export const dynamic = "force-dynamic";
+
 const limiter = new RateLimiter(120);
 const cache = new TtlCache<SymbolHit[]>(5 * 60 * 1000);
 
