@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { normalizeSymbol } from "@/lib/symbols";
@@ -116,6 +117,9 @@ export function TickerSearch({ compact = false, autoFocus = false }: { compact?:
         <button type="submit" disabled={pending}>
           {pending ? "Analyzing…" : "Analyze"}
         </button>
+        <Link href="/movers" className="movers-btn">
+          Movers
+        </Link>
       </form>
       {open && suggestions.length > 0 && (
         <ul className="suggestions" id={listId} role="listbox">
