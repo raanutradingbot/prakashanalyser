@@ -36,7 +36,20 @@ export interface MoversResult {
 const ttl = Number(process.env.SCAN_CACHE_TTL_SECONDS || 1800) * 1000;
 const cache = new TtlCache<ScanHit[]>(ttl, 10);
 const moversCache = new TtlCache<MoversResult>(ttl, 10);
-const CONCURRENCY = 8;
+// Deliberately conservative. At CONCURRENCY=8, scanning the full 546-symbol
+// universe on the production server (but not reproducible in local testing
+// at the same concurrency against the same API) occasionally returned
+// internally-consistent but factually wrong data for a handful of random
+// symbols each run — e.g. AMZN at $3.72 with a plausible-looking +1.64% day
+// change, Home Depot at $45. Root cause wasn't pinned down (possibly
+// connection-reuse mixing under Node's fetch/Undici at high concurrency,
+// possibly Alpaca-side under burst load from one API key) — since the
+// corrupted data is self-consistent, no validation check can reliably catch
+// it after the fact, so this cuts concurrency hard instead as the actual
+// mitigation. Slower scans, but every number has been correct across
+// repeated verification. If this changes, raise it incrementally while
+// verifying each step with scripts/debug-concurrency.mjs.
+const CONCURRENCY = 3;
 const ATR_THRESHOLD_PCT = Number(process.env.MOVERS_ATR_THRESHOLD_PCT || 5);
 const BIG_MOVE_LOOKBACK_DAYS = 20;
 
