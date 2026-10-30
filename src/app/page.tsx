@@ -23,7 +23,10 @@ export default async function Home() {
             buyers and sellers have stepped in before, and the reasons behind every reading.
           </p>
           <TickerSearch autoFocus />
-          <nav className="quick" aria-label="Popular tickers">
+          <nav className="quick" aria-label="Popular tickers and tools">
+            <Link href="/movers" className="quick-movers">
+              Movers
+            </Link>
             {POPULAR.map((p) => (
               <Link key={p.symbol} href={`/analyze/${p.symbol}`} title={p.name}>
                 {p.symbol}

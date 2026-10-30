@@ -156,21 +156,6 @@ a {
   opacity: 0.6;
   cursor: wait;
 }
-.search .movers-btn {
-  display: flex;
-  align-items: center;
-  border-left: 1.5px solid var(--ink);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-weight: 600;
-  padding: 0 16px;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.search .movers-btn:hover {
-  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
-}
 .search .error {
   margin: 6px 0 0;
   color: var(--down);
@@ -301,6 +286,15 @@ table.movers td.px {
   font-weight: 400;
   color: var(--ink-3);
   margin-left: 6px;
+}
+.quick a.quick-movers {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+.quick a.quick-movers:hover {
+  background: var(--ink-2);
+  border-color: var(--ink-2);
 }
 .home-figure {
   border-left: 1px solid var(--rule);
@@ -887,7 +881,8 @@ table.screener td.chg {
 }
 @media (max-width: 600px) {
   .site-header .search {
-    width: 190px;
+    width: 150px;
+    min-width: 0;
   }
   .quote .asof {
     margin-left: 0;
@@ -912,10 +907,6 @@ table.screener td.chg {
   }
   .site-header .search input {
     padding: 8px 10px;
-  }
-  .site-header .search .movers-btn {
-    padding: 0 10px;
-    font-size: 14px;
   }
   .search.large input {
     font-size: 18px;
