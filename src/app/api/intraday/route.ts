@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
   const range: IntradayRange = match;
 
   try {
-    const bars = await getIntradayChart(symbol, range);
-    return NextResponse.json({ symbol, range, bars }, { headers: { "Cache-Control": "private, max-age=30" } });
+    const { bars, tpSl } = await getIntradayChart(symbol, range);
+    return NextResponse.json({ symbol, range, bars, tpSl }, { headers: { "Cache-Control": "private, max-age=30" } });
   } catch (err) {
     if (err instanceof DataProviderError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

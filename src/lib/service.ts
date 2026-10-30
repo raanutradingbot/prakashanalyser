@@ -1,16 +1,17 @@
 import "server-only";
-import type { AnalysisResult, Bar, DailyRange, IntradayRange, NewsItem } from "./types";
+import type { AnalysisResult, Bar, DailyRange, IntradayRange, NewsItem, TpSlSignal } from "./types";
 import { analyze, calendarDaysFor } from "./analyze";
 import { getProvider, DataProviderError, type IntradayTimeframe } from "./data";
 import { TtlCache } from "./cache";
 import { writeSummary } from "./ai";
+import { findLatestTpSlSignal } from "./tpsl";
 
 const ttl = Number(process.env.CACHE_TTL_SECONDS || 300) * 1000;
 const barCache = new TtlCache<Bar[]>(ttl);
 const aiCache = new TtlCache<string | null>(6 * 60 * 60 * 1000);
 const newsCache = new TtlCache<NewsItem[]>(Number(process.env.NEWS_CACHE_TTL_SECONDS || 900) * 1000);
 const intradayTtl = Number(process.env.INTRADAY_CACHE_TTL_SECONDS || 60) * 1000;
-const intradayCache = new TtlCache<Bar[]>(intradayTtl);
+const intradayCache = new TtlCache<IntradayChart>(intradayTtl);
 
 /** Fetch, analyze and (optionally) summarize/fetch news. Shared by the page and the JSON API. */
 export async function getAnalysis(
@@ -71,12 +72,20 @@ const INTRADAY_CONFIG: Record<IntradayRange, { timeframe: IntradayTimeframe; ses
   "4H": { timeframe: "4Hour", sessions: 60, bufferDays: 100 },
 };
 
+export interface IntradayChart {
+  bars: Bar[];
+  /** Same signal as the daily chart's, but found on these intraday bars —
+   *  the EMA/ATR warm-up uses the full fetched window (wider than what's
+   *  ultimately shown), same as getAnalysis does for the daily chart. */
+  tpSl: TpSlSignal | null;
+}
+
 /**
- * Sub-daily bars for the intraday chart views (15m/30m/1H/4H). The trend
- * analysis itself (verdict, signals, levels) stays on the daily dataset
- * from getAnalysis — only the chart switches resolution here.
+ * Sub-daily bars for the intraday chart views (1D/15m/30m/1H/4H). The trend
+ * verdict, signals and levels stay on the daily dataset from getAnalysis —
+ * only the chart (and its TP/SL signal) switches resolution here.
  */
-export async function getIntradayChart(symbol: string, range: IntradayRange): Promise<Bar[]> {
+export async function getIntradayChart(symbol: string, range: IntradayRange): Promise<IntradayChart> {
   const provider = getProvider();
   if (!provider.getIntradayBars) {
     throw new DataProviderError(`${provider.label} doesn't support intraday charts yet.`, 501);
@@ -91,9 +100,10 @@ export async function getIntradayChart(symbol: string, range: IntradayRange): Pr
   const from = new Date(to.getTime() - bufferDays * 86_400_000);
 
   const bars = await provider.getIntradayBars(symbol, timeframe, from, to);
-  const trimmed = trimToRecentSessions(bars, sessions);
-  intradayCache.set(key, trimmed);
-  return trimmed;
+  const tpSl = findLatestTpSlSignal(bars);
+  const result: IntradayChart = { bars: trimToRecentSessions(bars, sessions), tpSl };
+  intradayCache.set(key, result);
+  return result;
 }
 
 /** Keeps only the bars from the most recent `sessions` distinct trading days present in `bars`. */

@@ -195,7 +195,7 @@ async function ChartSection({ symbol, range, daily }: { symbol: string; range: R
     );
   }
   try {
-    const bars = await getIntradayChart(symbol, range);
+    const { bars, tpSl } = await getIntradayChart(symbol, range);
     if (bars.length === 0) {
       return (
         <div className="chart-box chart-box-loading">
@@ -203,7 +203,7 @@ async function ChartSection({ symbol, range, daily }: { symbol: string; range: R
         </div>
       );
     }
-    return <PriceChart bars={bars} intraday />;
+    return <PriceChart bars={bars} tpSl={tpSl} intraday />;
   } catch (err) {
     const message = err instanceof DataProviderError ? err.message : "Couldn't load the intraday chart right now.";
     return (
@@ -249,11 +249,12 @@ function rangeLabel(r: DailyRange) {
 }
 
 function intradayNote(r: IntradayRange) {
-  return {
+  const span = {
     "1D": "15-minute bars for the most recent trading session.",
     "15m": "15-minute bars for the last 2 trading sessions.",
     "30m": "30-minute bars for the last week.",
     "1H": "Hourly bars for the last month.",
     "4H": "4-hour bars for the last 3 months.",
   }[r];
+  return `${span} Entry/SL/TP1-3 lines show the latest 5/13-EMA crossover signal on these bars, sized off ATR(14) — not a recommendation.`;
 }
