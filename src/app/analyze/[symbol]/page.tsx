@@ -250,6 +250,7 @@ function rangeLabel(r: DailyRange) {
 
 function intradayNote(r: IntradayRange) {
   return {
+    "1D": "15-minute bars for the most recent trading session.",
     "15m": "15-minute bars for the last 2 trading sessions.",
     "30m": "30-minute bars for the last week.",
     "1H": "Hourly bars for the last month.",

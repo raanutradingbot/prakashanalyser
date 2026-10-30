@@ -64,6 +64,7 @@ export async function getAnalysis(
  * that many sessions exist even across weekends/holidays.
  */
 const INTRADAY_CONFIG: Record<IntradayRange, { timeframe: IntradayTimeframe; sessions: number; bufferDays: number }> = {
+  "1D": { timeframe: "15Min", sessions: 1, bufferDays: 5 },
   "15m": { timeframe: "15Min", sessions: 2, bufferDays: 5 },
   "30m": { timeframe: "30Min", sessions: 5, bufferDays: 10 },
   "1H": { timeframe: "1Hour", sessions: 20, bufferDays: 35 },

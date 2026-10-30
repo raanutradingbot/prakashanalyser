@@ -15,10 +15,10 @@ export interface Bar {
 }
 
 export type DailyRange = "3M" | "6M" | "1Y" | "2Y" | "5Y";
-export type IntradayRange = "15m" | "30m" | "1H" | "4H";
+export type IntradayRange = "1D" | "15m" | "30m" | "1H" | "4H";
 export type Range = IntradayRange | DailyRange;
 export const DAILY_RANGES: DailyRange[] = ["3M", "6M", "1Y", "2Y", "5Y"];
-export const INTRADAY_RANGES: IntradayRange[] = ["15m", "30m", "1H", "4H"];
+export const INTRADAY_RANGES: IntradayRange[] = ["1D", "15m", "30m", "1H", "4H"];
 export const RANGES: Range[] = [...INTRADAY_RANGES, ...DAILY_RANGES];
 export const isIntradayRange = (r: Range): r is IntradayRange => (INTRADAY_RANGES as string[]).includes(r);
 
