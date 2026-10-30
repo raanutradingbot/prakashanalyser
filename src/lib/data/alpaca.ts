@@ -1,9 +1,58 @@
 import type { Bar, NewsItem, SymbolHit } from "../types";
-import { DataProviderError, SymbolNotFoundError, type MarketDataProvider } from "./provider";
+import { DataProviderError, SymbolNotFoundError, type IntradayTimeframe, type MarketDataProvider } from "./provider";
 import { searchSymbolIndex } from "./symbolIndex";
-import { toEasternDate } from "./time";
+import { toEasternDate, toInstant } from "./time";
 
 let assetCache: { entries: SymbolHit[]; expires: number } | null = null;
+
+/** Shared paginated fetch for both /bars timeframes — daily and intraday differ only
+ *  in the `timeframe` param, the precision of start/end, and how `time` gets formatted. */
+async function fetchBars(
+  symbol: string,
+  timeframe: string,
+  from: Date,
+  to: Date,
+  keyId: string,
+  secret: string,
+  feed: string,
+  formatTime: (d: Date) => string,
+): Promise<Bar[]> {
+  const bars: Bar[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL(`https://data.alpaca.markets/v2/stocks/${encodeURIComponent(symbol)}/bars`);
+    url.searchParams.set("timeframe", timeframe);
+    url.searchParams.set("start", from.toISOString());
+    url.searchParams.set("end", to.toISOString());
+    url.searchParams.set("adjustment", "all");
+    url.searchParams.set("feed", feed);
+    url.searchParams.set("limit", "10000");
+    url.searchParams.set("sort", "asc");
+    if (pageToken) url.searchParams.set("page_token", pageToken);
+
+    const res = await fetch(url, {
+      headers: { "APCA-API-KEY-ID": keyId, "APCA-API-SECRET-KEY": secret },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => {
+      throw new DataProviderError("Couldn't reach the market data service. Try again in a moment.", 503);
+    });
+    if (res.status === 404 || res.status === 422) throw new SymbolNotFoundError(symbol);
+    if (res.status === 429) throw new DataProviderError("Market data rate limit reached. Try again shortly.", 429);
+    if (!res.ok) throw new DataProviderError(`Alpaca returned HTTP ${res.status}.`);
+
+    const json = (await res.json()) as {
+      bars: { t: string; o: number; h: number; l: number; c: number; v: number }[] | null;
+      next_page_token?: string | null;
+    };
+    for (const b of json.bars ?? []) {
+      bars.push({ time: formatTime(new Date(b.t)), open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v });
+    }
+    pageToken = json.next_page_token ?? undefined;
+  } while (pageToken);
+
+  return bars;
+}
 
 /**
  * Alpaca Market Data v2 — https://docs.alpaca.markets/reference/stockbars
@@ -22,40 +71,14 @@ export function alpacaProvider(): MarketDataProvider {
     id: "alpaca",
     label: `Alpaca (${feed.toUpperCase()} feed)`,
     async getDailyBars(symbol, from, to) {
-      const bars: Bar[] = [];
-      let pageToken: string | undefined;
-      do {
-        const url = new URL(`https://data.alpaca.markets/v2/stocks/${encodeURIComponent(symbol)}/bars`);
-        url.searchParams.set("timeframe", "1Day");
-        url.searchParams.set("start", from.toISOString().slice(0, 10));
-        url.searchParams.set("end", to.toISOString().slice(0, 10));
-        url.searchParams.set("adjustment", "all");
-        url.searchParams.set("feed", feed);
-        url.searchParams.set("limit", "10000");
-        url.searchParams.set("sort", "asc");
-        if (pageToken) url.searchParams.set("page_token", pageToken);
+      const bars = await fetchBars(symbol, "1Day", from, to, keyId, secret, feed, toEasternDate);
+      if (bars.length === 0) throw new SymbolNotFoundError(symbol);
+      return bars;
+    },
 
-        const res = await fetch(url, {
-          headers: { "APCA-API-KEY-ID": keyId, "APCA-API-SECRET-KEY": secret },
-          cache: "no-store",
-          signal: AbortSignal.timeout(10_000),
-        }).catch(() => {
-          throw new DataProviderError("Couldn't reach the market data service. Try again in a moment.", 503);
-        });
-        if (res.status === 404 || res.status === 422) throw new SymbolNotFoundError(symbol);
-        if (res.status === 429) throw new DataProviderError("Market data rate limit reached. Try again shortly.", 429);
-        if (!res.ok) throw new DataProviderError(`Alpaca returned HTTP ${res.status}.`);
-
-        const json = (await res.json()) as {
-          bars: { t: string; o: number; h: number; l: number; c: number; v: number }[] | null;
-          next_page_token?: string | null;
-        };
-        for (const b of json.bars ?? []) {
-          bars.push({ time: toEasternDate(new Date(b.t)), open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v });
-        }
-        pageToken = json.next_page_token ?? undefined;
-      } while (pageToken);
-
+    async getIntradayBars(symbol, timeframe: IntradayTimeframe, from, to) {
+      const alpacaTimeframe = timeframe === "15Min" ? "15Min" : "1Hour";
+      const bars = await fetchBars(symbol, alpacaTimeframe, from, to, keyId, secret, feed, toInstant);
       if (bars.length === 0) throw new SymbolNotFoundError(symbol);
       return bars;
     },

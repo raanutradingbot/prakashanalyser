@@ -1,5 +1,7 @@
 import type { Bar, NewsItem, SymbolHit } from "../types";
 
+export type IntradayTimeframe = "15Min" | "1Hour";
+
 export interface MarketDataProvider {
   id: string;
   label: string;
@@ -9,6 +11,8 @@ export interface MarketDataProvider {
   getNews?(symbol: string, limit: number): Promise<NewsItem[]>;
   /** Ticker/company-name search for the search box. Falls back to a static list if omitted. */
   searchSymbols?(query: string, limit: number): Promise<SymbolHit[]>;
+  /** Sub-daily bars for the 1D/1W chart views. `Bar.time` is a full ISO instant here, not a date. */
+  getIntradayBars?(symbol: string, timeframe: IntradayTimeframe, from: Date, to: Date): Promise<Bar[]>;
 }
 
 export class DataProviderError extends Error {

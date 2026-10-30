@@ -13,10 +13,16 @@ import {
   type IChartApi,
   type SeriesMarker,
   type Time,
+  type UTCTimestamp,
 } from "lightweight-charts";
 import type { AnalysisResult } from "@/lib/types";
 
-type Props = Pick<AnalysisResult, "bars" | "overlays" | "rsi" | "levels" | "patterns">;
+type Props = Pick<AnalysisResult, "bars"> &
+  Partial<Pick<AnalysisResult, "overlays" | "rsi" | "levels" | "patterns">> & {
+    /** True for the 1D/1W intraday views: shows time-of-day on the x-axis, skips the
+     *  daily-only indicators (SMA overlays, RSI, support/resistance, patterns). */
+    intraday?: boolean;
+  };
 
 function cssVar(name: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -29,11 +35,18 @@ function alpha(hex: string, a: number) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
+/** Converts a Bar's `time` (either "YYYY-MM-DD" or a full ISO instant) to the
+ *  numeric UTCTimestamp lightweight-charts needs for intraday time-of-day display. */
+function toChartTime(s: string): Time {
+  const iso = s.includes("T") ? s : `${s}T00:00:00Z`;
+  return Math.floor(new Date(iso).getTime() / 1000) as UTCTimestamp;
+}
+
 /**
- * Candles + 20/50/200-day averages, support/resistance lines, pattern
- * markers, a volume histogram, and an RSI pane underneath.
+ * Candles + volume, and — for daily ranges only — 20/50/200-day averages,
+ * support/resistance lines, pattern markers, and an RSI pane underneath.
  */
-export function PriceChart({ bars, overlays, rsi, levels, patterns }: Props) {
+export function PriceChart({ bars, overlays, rsi, levels, patterns, intraday = false }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,7 +80,12 @@ export function PriceChart({ bars, overlays, rsi, levels, patterns }: Props) {
         },
         grid: { vertLines: { color: c.rule }, horzLines: { color: c.rule } },
         rightPriceScale: { borderColor: c.rule },
-        timeScale: { borderColor: c.rule, rightOffset: 4 },
+        timeScale: {
+          borderColor: c.rule,
+          rightOffset: 4,
+          timeVisible: intraday,
+          secondsVisible: false,
+        },
         crosshair: { mode: CrosshairMode.Normal },
       });
 
@@ -80,7 +98,7 @@ export function PriceChart({ bars, overlays, rsi, levels, patterns }: Props) {
         wickDownColor: c.down,
         priceLineVisible: false,
       });
-      candles.setData(bars.map((b) => ({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close })));
+      candles.setData(bars.map((b) => ({ time: toChartTime(b.time), open: b.open, high: b.high, low: b.low, close: b.close })));
 
       const volume = chart.addSeries(HistogramSeries, {
         priceScaleId: "vol",
@@ -91,27 +109,30 @@ export function PriceChart({ bars, overlays, rsi, levels, patterns }: Props) {
       volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
       volume.setData(
         bars.map((b) => ({
-          time: b.time as Time,
+          time: toChartTime(b.time),
           value: b.volume,
           color: alpha(b.close >= b.open ? c.up : c.down, 0.25),
         })),
       );
 
-      const line = (data: typeof overlays.sma20, color: string, width: 1 | 2) => {
-        const s = chart!.addSeries(LineSeries, {
-          color,
-          lineWidth: width,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-        });
-        s.setData(data.map((p) => ({ time: p.time as Time, value: p.value })));
-      };
-      line(overlays.sma20, c.ma20, 1);
-      line(overlays.sma50, c.ma50, 2);
-      line(overlays.sma200, c.ma200, 2);
+      if (overlays) {
+        const line = (data: typeof overlays.sma20, color: string, width: 1 | 2) => {
+          if (data.length === 0) return;
+          const s = chart!.addSeries(LineSeries, {
+            color,
+            lineWidth: width,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          s.setData(data.map((p) => ({ time: toChartTime(p.time), value: p.value })));
+        };
+        line(overlays.sma20, c.ma20, 1);
+        line(overlays.sma50, c.ma50, 2);
+        line(overlays.sma200, c.ma200, 2);
+      }
 
-      for (const l of levels) {
+      for (const l of levels ?? []) {
         candles.createPriceLine({
           price: l.price,
           color: alpha(l.kind === "support" ? c.up : c.down, 0.8),
@@ -122,32 +143,36 @@ export function PriceChart({ bars, overlays, rsi, levels, patterns }: Props) {
         });
       }
 
-      const shown = new Set(bars.map((b) => b.time));
-      const markers: SeriesMarker<Time>[] = patterns
-        .filter((p) => shown.has(p.time))
-        .map((p): SeriesMarker<Time> => ({
-          time: p.time as Time,
-          position: p.bias === "bearish" ? "aboveBar" : "belowBar",
-          shape: p.bias === "bullish" ? "arrowUp" : p.bias === "bearish" ? "arrowDown" : "circle",
-          color: p.bias === "bullish" ? c.up : p.bias === "bearish" ? c.down : c.flat,
-        }))
-        .sort((a, b) => (a.time < b.time ? -1 : 1));
-      createSeriesMarkers(candles, markers);
-
-      const rsiSeries = chart.addSeries(
-        LineSeries,
-        { color: c.ink2, lineWidth: 1, priceLineVisible: false, lastValueVisible: true },
-        1,
-      );
-      rsiSeries.setData(rsi.map((p) => ({ time: p.time as Time, value: p.value })));
-      for (const [v, col] of [
-        [70, c.down],
-        [30, c.up],
-      ] as const) {
-        rsiSeries.createPriceLine({ price: v, color: alpha(col, 0.6), lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
+      if (patterns && patterns.length > 0) {
+        const shown = new Set(bars.map((b) => b.time));
+        const markers: SeriesMarker<Time>[] = patterns
+          .filter((p) => shown.has(p.time))
+          .map((p): SeriesMarker<Time> => ({
+            time: toChartTime(p.time),
+            position: p.bias === "bearish" ? "aboveBar" : "belowBar",
+            shape: p.bias === "bullish" ? "arrowUp" : p.bias === "bearish" ? "arrowDown" : "circle",
+            color: p.bias === "bullish" ? c.up : p.bias === "bearish" ? c.down : c.flat,
+          }))
+          .sort((a, b) => (a.time < b.time ? -1 : 1));
+        createSeriesMarkers(candles, markers);
       }
-      chart.panes()[0]?.setStretchFactor(4);
-      chart.panes()[1]?.setStretchFactor(1);
+
+      if (rsi && rsi.length > 0) {
+        const rsiSeries = chart.addSeries(
+          LineSeries,
+          { color: c.ink2, lineWidth: 1, priceLineVisible: false, lastValueVisible: true },
+          1,
+        );
+        rsiSeries.setData(rsi.map((p) => ({ time: toChartTime(p.time), value: p.value })));
+        for (const [v, col] of [
+          [70, c.down],
+          [30, c.up],
+        ] as const) {
+          rsiSeries.createPriceLine({ price: v, color: alpha(col, 0.6), lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
+        }
+        chart.panes()[0]?.setStretchFactor(4);
+        chart.panes()[1]?.setStretchFactor(1);
+      }
       chart.timeScale().fitContent();
     };
 
@@ -158,14 +183,18 @@ export function PriceChart({ bars, overlays, rsi, levels, patterns }: Props) {
       mq.removeEventListener("change", build);
       chart?.remove();
     };
-  }, [bars, overlays, rsi, levels, patterns]);
+  }, [bars, overlays, rsi, levels, patterns, intraday]);
 
   return (
     <div
       ref={ref}
       className="chart-box"
       role="img"
-      aria-label="Daily candlestick chart with 20, 50 and 200-day moving averages, support and resistance lines, volume, and RSI"
+      aria-label={
+        intraday
+          ? "Intraday candlestick chart with volume"
+          : "Daily candlestick chart with 20, 50 and 200-day moving averages, support and resistance lines, volume, and RSI"
+      }
     />
   );
 }

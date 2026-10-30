@@ -1,6 +1,39 @@
 import type { NewsItem, SymbolHit } from "../types";
-import { DataProviderError, SymbolNotFoundError, type MarketDataProvider } from "./provider";
-import { toEasternDate } from "./time";
+import { DataProviderError, SymbolNotFoundError, type IntradayTimeframe, type MarketDataProvider } from "./provider";
+import { toEasternDate, toInstant } from "./time";
+
+type PolygonAgg = { t: number; o: number; h: number; l: number; c: number; v: number };
+
+async function fetchAggs(
+  base: string,
+  key: string,
+  symbol: string,
+  multiplier: number,
+  timespan: string,
+  from: Date,
+  to: Date,
+): Promise<PolygonAgg[]> {
+  const f = timespan === "day" ? from.toISOString().slice(0, 10) : from.toISOString();
+  const t = timespan === "day" ? to.toISOString().slice(0, 10) : to.toISOString();
+  const url = new URL(`${base}/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/${multiplier}/${timespan}/${f}/${t}`);
+  url.searchParams.set("adjusted", "true");
+  url.searchParams.set("sort", "asc");
+  url.searchParams.set("limit", "50000");
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${key}` },
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => {
+    throw new DataProviderError("Couldn't reach the market data service. Try again in a moment.", 503);
+  });
+  if (res.status === 404) throw new SymbolNotFoundError(symbol);
+  if (res.status === 429) throw new DataProviderError("Market data rate limit reached. Try again shortly.", 429);
+  if (!res.ok) throw new DataProviderError(`Polygon returned HTTP ${res.status}.`);
+
+  const json = (await res.json()) as { results?: PolygonAgg[] };
+  return json.results ?? [];
+}
 
 /**
  * Polygon.io aggregates (the service is also branded Massive; set
@@ -16,29 +49,24 @@ export function polygonProvider(): MarketDataProvider {
     id: "polygon",
     label: "Polygon.io",
     async getDailyBars(symbol, from, to) {
-      const f = from.toISOString().slice(0, 10);
-      const t = to.toISOString().slice(0, 10);
-      const url = new URL(`${base}/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/1/day/${f}/${t}`);
-      url.searchParams.set("adjusted", "true");
-      url.searchParams.set("sort", "asc");
-      url.searchParams.set("limit", "50000");
-
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${key}` },
-        cache: "no-store",
-        signal: AbortSignal.timeout(10_000),
-      }).catch(() => {
-        throw new DataProviderError("Couldn't reach the market data service. Try again in a moment.", 503);
-      });
-      if (res.status === 404) throw new SymbolNotFoundError(symbol);
-      if (res.status === 429) throw new DataProviderError("Market data rate limit reached. Try again shortly.", 429);
-      if (!res.ok) throw new DataProviderError(`Polygon returned HTTP ${res.status}.`);
-
-      const json = (await res.json()) as {
-        results?: { t: number; o: number; h: number; l: number; c: number; v: number }[];
-      };
-      const bars = (json.results ?? []).map((b) => ({
+      const results = await fetchAggs(base, key, symbol, 1, "day", from, to);
+      const bars = results.map((b) => ({
         time: toEasternDate(new Date(b.t)),
+        open: b.o,
+        high: b.h,
+        low: b.l,
+        close: b.c,
+        volume: b.v,
+      }));
+      if (bars.length === 0) throw new SymbolNotFoundError(symbol);
+      return bars;
+    },
+
+    async getIntradayBars(symbol, timeframe: IntradayTimeframe, from, to) {
+      const [multiplier, timespan] = timeframe === "15Min" ? [15, "minute"] : [1, "hour"];
+      const results = await fetchAggs(base, key, symbol, multiplier, timespan, from, to);
+      const bars = results.map((b) => ({
+        time: toInstant(new Date(b.t)),
         open: b.o,
         high: b.h,
         low: b.l,

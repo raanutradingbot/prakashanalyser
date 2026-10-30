@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAnalysis } from "@/lib/service";
-import { normalizeSymbol, parseRange } from "@/lib/symbols";
+import { normalizeSymbol, parseRange, toDailyRange } from "@/lib/symbols";
 import { RateLimiter } from "@/lib/cache";
 import { DataProviderError } from "@/lib/data";
 import { AnalysisError } from "@/lib/analyze";
@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
       { status: 400 },
     );
   }
-  const range = parseRange(params.get("range"));
+  // Note: a 1D/1W range here still returns the daily analysis (JSON API
+  // consumers want the trend data) — use /api/intraday for actual intraday bars.
+  const range = toDailyRange(parseRange(params.get("range")));
 
   try {
     const result = await getAnalysis(symbol, range, {

@@ -1,4 +1,10 @@
-/** One daily (or weekly) OHLCV bar. `time` is a YYYY-MM-DD string in US/Eastern trading-date terms. */
+/**
+ * One OHLCV bar. `time` is either a YYYY-MM-DD date string (daily bars, in
+ * US/Eastern trading-date terms) or a full ISO instant with time-of-day
+ * (intraday bars, e.g. "2026-10-29T14:30:00.000Z") — the two chart ranges
+ * that use intraday bars are IntradayRange ("1D" | "1W"); everything else
+ * uses daily bars.
+ */
 export interface Bar {
   time: string;
   open: number;
@@ -8,8 +14,13 @@ export interface Bar {
   volume: number;
 }
 
-export type Range = "3M" | "6M" | "1Y" | "2Y" | "5Y";
-export const RANGES: Range[] = ["3M", "6M", "1Y", "2Y", "5Y"];
+export type DailyRange = "3M" | "6M" | "1Y" | "2Y" | "5Y";
+export type IntradayRange = "1D" | "1W";
+export type Range = IntradayRange | DailyRange;
+export const DAILY_RANGES: DailyRange[] = ["3M", "6M", "1Y", "2Y", "5Y"];
+export const INTRADAY_RANGES: IntradayRange[] = ["1D", "1W"];
+export const RANGES: Range[] = [...INTRADAY_RANGES, ...DAILY_RANGES];
+export const isIntradayRange = (r: Range): r is IntradayRange => (INTRADAY_RANGES as string[]).includes(r);
 
 export type TrendDirection = "uptrend" | "downtrend" | "sideways";
 export type Bias = "bullish" | "bearish" | "neutral";
@@ -67,7 +78,7 @@ export interface SeriesPoint {
 
 export interface AnalysisResult {
   symbol: string;
-  range: Range;
+  range: DailyRange;
   provider: string;
   generatedAt: string;
   lastBar: Bar;

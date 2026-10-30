@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { getAnalysis } from "@/lib/service";
-import { normalizeSymbol, parseRange } from "@/lib/symbols";
-import { RANGES, type AnalysisResult, type Range } from "@/lib/types";
+import { getAnalysis, getIntradayChart } from "@/lib/service";
+import { normalizeSymbol, parseRange, toDailyRange } from "@/lib/symbols";
+import { isIntradayRange, RANGES, type AnalysisResult, type DailyRange, type Range } from "@/lib/types";
 import { DataProviderError } from "@/lib/data";
 import { AnalysisError } from "@/lib/analyze";
 import { aiEnabled } from "@/lib/ai";
@@ -38,6 +38,7 @@ export default async function AnalyzePage({ params, searchParams }: { params: Pa
   const { range: rawRange } = await searchParams;
   const symbol = normalizeSymbol(decodeURIComponent(raw));
   const range = parseRange(rawRange);
+  const intraday = isIntradayRange(range);
 
   if (!symbol) {
     return (
@@ -47,9 +48,12 @@ export default async function AnalyzePage({ params, searchParams }: { params: Pa
     );
   }
 
+  // The trend verdict, signals and levels always run on daily data — even
+  // when the chart itself is zoomed into 1D/1W — so they don't flip-flop
+  // based on which chart resolution happens to be selected.
   let r: AnalysisResult;
   try {
-    r = await getAnalysis(symbol, range);
+    r = await getAnalysis(symbol, toDailyRange(range));
   } catch (err) {
     if (err instanceof DataProviderError || err instanceof AnalysisError) {
       return <Problem title={`Can't analyze ${symbol} right now`}>{err.message}</Problem>;
@@ -94,32 +98,49 @@ export default async function AnalyzePage({ params, searchParams }: { params: Pa
           </h2>
           <nav className="ranges" aria-label="Chart range">
             {RANGES.map((x) => (
-              <Link key={x} href={`/analyze/${r.symbol}?range=${x}`} aria-current={x === r.range ? "page" : undefined} scroll={false}>
+              <Link key={x} href={`/analyze/${r.symbol}?range=${x}`} aria-current={x === range ? "page" : undefined} scroll={false}>
                 {x}
               </Link>
             ))}
           </nav>
-          <div className="legend" aria-hidden="true">
-            <span>
-              <i style={{ background: "var(--ma20)" }} />
-              20-day
-            </span>
-            <span>
-              <i style={{ background: "var(--ma50)" }} />
-              50-day
-            </span>
-            <span>
-              <i style={{ background: "var(--ma200)" }} />
-              200-day
-            </span>
-            <span>
-              <i className="dash" />
-              Support and resistance
-            </span>
-          </div>
+          {!intraday && (
+            <div className="legend" aria-hidden="true">
+              <span>
+                <i style={{ background: "var(--ma20)" }} />
+                20-day
+              </span>
+              <span>
+                <i style={{ background: "var(--ma50)" }} />
+                50-day
+              </span>
+              <span>
+                <i style={{ background: "var(--ma200)" }} />
+                200-day
+              </span>
+              <span>
+                <i className="dash" />
+                Support and resistance
+              </span>
+            </div>
+          )}
         </div>
-        <PriceChart bars={r.bars} overlays={r.overlays} rsi={r.rsi} levels={r.levels} patterns={r.patterns} />
-        <p className="chart-note">Lower pane: RSI (14) with 70 and 30 marked. Arrows mark candlestick patterns.</p>
+        <Suspense
+          key={range}
+          fallback={
+            <div className="chart-box chart-box-loading">
+              <p className="empty">Loading chart…</p>
+            </div>
+          }
+        >
+          <ChartSection symbol={r.symbol} range={range} daily={r} />
+        </Suspense>
+        <p className="chart-note">
+          {intraday
+            ? range === "1D"
+              ? "15-minute bars for the most recent trading session."
+              : "Hourly bars for the last 5 trading sessions."
+            : "Lower pane: RSI (14) with 70 and 30 marked. Arrows mark candlestick patterns."}
+        </p>
       </section>
 
       <div className="details section">
@@ -158,12 +179,36 @@ export default async function AnalyzePage({ params, searchParams }: { params: Pa
   );
 }
 
-async function NewsSection({ symbol, range }: { symbol: string; range: Range }) {
+async function ChartSection({ symbol, range, daily }: { symbol: string; range: Range; daily: AnalysisResult }) {
+  if (!isIntradayRange(range)) {
+    return <PriceChart bars={daily.bars} overlays={daily.overlays} rsi={daily.rsi} levels={daily.levels} patterns={daily.patterns} />;
+  }
+  try {
+    const bars = await getIntradayChart(symbol, range);
+    if (bars.length === 0) {
+      return (
+        <div className="chart-box chart-box-loading">
+          <p className="empty">No intraday data available right now{range === "1D" ? " for today" : " for this week"}.</p>
+        </div>
+      );
+    }
+    return <PriceChart bars={bars} intraday />;
+  } catch (err) {
+    const message = err instanceof DataProviderError ? err.message : "Couldn't load the intraday chart right now.";
+    return (
+      <div className="chart-box chart-box-loading">
+        <p className="empty">{message}</p>
+      </div>
+    );
+  }
+}
+
+async function NewsSection({ symbol, range }: { symbol: string; range: DailyRange }) {
   const r = await getAnalysis(symbol, range, { news: true });
   return <NewsList items={r.news ?? []} />;
 }
 
-async function AiSummary({ symbol, range }: { symbol: string; range: Range }) {
+async function AiSummary({ symbol, range }: { symbol: string; range: DailyRange }) {
   const r = await getAnalysis(symbol, range, { ai: true });
   if (!r.aiSummary) return <p className="empty">A written summary isn&apos;t available right now.</p>;
   return (
@@ -188,6 +233,6 @@ function Problem({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function rangeLabel(r: Range) {
+function rangeLabel(r: DailyRange) {
   return { "3M": "3 months", "6M": "6 months", "1Y": "1 year", "2Y": "2 years", "5Y": "5 years" }[r];
 }

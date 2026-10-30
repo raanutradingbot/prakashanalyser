@@ -1,7 +1,7 @@
 import "server-only";
-import type { AnalysisResult, Bar, NewsItem, Range } from "./types";
+import type { AnalysisResult, Bar, DailyRange, IntradayRange, NewsItem } from "./types";
 import { analyze, calendarDaysFor } from "./analyze";
-import { getProvider } from "./data";
+import { getProvider, DataProviderError } from "./data";
 import { TtlCache } from "./cache";
 import { writeSummary } from "./ai";
 
@@ -9,11 +9,13 @@ const ttl = Number(process.env.CACHE_TTL_SECONDS || 300) * 1000;
 const barCache = new TtlCache<Bar[]>(ttl);
 const aiCache = new TtlCache<string | null>(6 * 60 * 60 * 1000);
 const newsCache = new TtlCache<NewsItem[]>(Number(process.env.NEWS_CACHE_TTL_SECONDS || 900) * 1000);
+const intradayTtl = Number(process.env.INTRADAY_CACHE_TTL_SECONDS || 60) * 1000;
+const intradayCache = new TtlCache<Bar[]>(intradayTtl);
 
 /** Fetch, analyze and (optionally) summarize/fetch news. Shared by the page and the JSON API. */
 export async function getAnalysis(
   symbol: string,
-  range: Range,
+  range: DailyRange,
   opts: { ai?: boolean; news?: boolean } = {},
 ): Promise<AnalysisResult> {
   const provider = getProvider();
@@ -52,4 +54,40 @@ export async function getAnalysis(
   }
 
   return { ...result, aiSummary, news };
+}
+
+/**
+ * Sub-daily bars for the 1D/1W chart views. "1D" returns just the most
+ * recent trading session's bars; "1W" returns the last 5 trading days'. The
+ * trend analysis itself (verdict, signals, levels) stays on the daily
+ * dataset from getAnalysis — only the chart switches resolution here.
+ */
+export async function getIntradayChart(symbol: string, range: IntradayRange): Promise<Bar[]> {
+  const provider = getProvider();
+  if (!provider.getIntradayBars) {
+    throw new DataProviderError(`${provider.label} doesn't support intraday charts yet.`, 501);
+  }
+
+  const key = `${provider.id}:${symbol}:${range}`;
+  const cached = intradayCache.get(key);
+  if (cached) return cached;
+
+  const timeframe = range === "1D" ? "15Min" : "1Hour";
+  const to = new Date();
+  // Buffer wide enough to guarantee a full session/week even across
+  // weekends and holidays; trimmed down to the actual requested window below.
+  const bufferDays = range === "1D" ? 5 : 12;
+  const from = new Date(to.getTime() - bufferDays * 86_400_000);
+
+  const bars = await provider.getIntradayBars(symbol, timeframe, from, to);
+  const trimmed = trimToRecentSessions(bars, range === "1D" ? 1 : 5);
+  intradayCache.set(key, trimmed);
+  return trimmed;
+}
+
+/** Keeps only the bars from the most recent `sessions` distinct trading days present in `bars`. */
+function trimToRecentSessions(bars: Bar[], sessions: number): Bar[] {
+  const days = [...new Set(bars.map((b) => b.time.slice(0, 10)))].sort();
+  const keep = new Set(days.slice(-sessions));
+  return bars.filter((b) => keep.has(b.time.slice(0, 10)));
 }

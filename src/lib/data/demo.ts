@@ -1,6 +1,7 @@
 import type { Bar, NewsItem } from "../types";
-import type { MarketDataProvider } from "./provider";
+import type { IntradayTimeframe, MarketDataProvider } from "./provider";
 import { SYMBOL_INDEX, searchSymbolIndex } from "./symbolIndex";
+import { easternWallClockToUtc } from "./time";
 
 /**
  * Deterministic synthetic US-equity data for local development and demos.
@@ -19,6 +20,9 @@ export const demoProvider: MarketDataProvider = {
   },
   async searchSymbols(query, limit) {
     return searchSymbolIndex(SYMBOL_INDEX, query, limit);
+  },
+  async getIntradayBars(symbol, timeframe, from, to) {
+    return generateIntradayBars(symbol, timeframe, from, to);
   },
 };
 
@@ -94,6 +98,56 @@ export function generateBars(symbol: string, from: Date, to: Date): Bar[] {
         close: r2(close),
         volume,
       });
+    }
+  }
+  return bars;
+}
+
+/**
+ * Synthetic intraday bars (market hours only, 9:30am-4:00pm ET) that glide
+ * from each day's real (demo) open to its real (demo) close, so the 1D/1W
+ * chart lines up with whatever the daily chart already shows for that day —
+ * deterministic per symbol, same as generateBars.
+ */
+function generateIntradayBars(symbol: string, timeframe: IntradayTimeframe, from: Date, to: Date): Bar[] {
+  const minutesPerBar = timeframe === "15Min" ? 15 : 60;
+  const barsPerDay = Math.ceil((6.5 * 60) / minutesPerBar); // 9:30-4:00 ET
+  const dailyBuffer = new Date(from.getTime() - 3 * 86_400_000);
+  const daily = generateBars(symbol, dailyBuffer, lastCompletedSession(to));
+  const rand = mulberry32(hash(`intraday:${symbol}:${timeframe}`));
+  const bars: Bar[] = [];
+
+  for (const day of daily) {
+    const dayStart = new Date(`${day.time}T00:00:00Z`);
+    if (dayStart.getTime() < from.getTime() - 86_400_000 || dayStart > to) continue;
+
+    const dayRange = Math.max(day.high - day.low, day.open * 0.004);
+    const perBarVol = (dayRange / Math.sqrt(barsPerDay)) * 0.5;
+    let barOpen = day.open;
+    for (let i = 0; i < barsPerDay; i++) {
+      const progress = (i + 1) / barsPerDay;
+      const glidePoint = day.open + (day.close - day.open) * progress;
+      const taper = 1 - progress * 0.7; // settle toward the real close near end of day
+      let barClose = i === barsPerDay - 1 ? day.close : glidePoint + gaussian(rand) * perBarVol * taper;
+      barClose = Math.max(0.01, barClose);
+      const spread = Math.abs(gaussian(rand)) * perBarVol * 0.6 + Math.abs(barClose - barOpen) * 0.3;
+      const barHigh = Math.max(barOpen, barClose) + spread * rand();
+      const barLow = Math.max(0.01, Math.min(barOpen, barClose) - spread * rand());
+      const barVolume = Math.round((day.volume / barsPerDay) * (0.5 + rand()));
+
+      const minute = i * minutesPerBar;
+      const barTime = easternWallClockToUtc(day.time, 9, 30 + minute);
+      if (barTime >= from && barTime <= to) {
+        bars.push({
+          time: barTime.toISOString(),
+          open: r2(barOpen),
+          high: r2(barHigh),
+          low: r2(barLow),
+          close: r2(barClose),
+          volume: barVolume,
+        });
+      }
+      barOpen = barClose;
     }
   }
   return bars;

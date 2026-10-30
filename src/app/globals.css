@@ -539,6 +539,13 @@ table.movers td.px {
   background: var(--surface);
   overflow: hidden;
 }
+.chart-box-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  text-align: center;
+}
 .chart-note {
   font-size: 14px;
   color: var(--ink-3);

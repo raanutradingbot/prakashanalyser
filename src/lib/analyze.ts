@@ -1,11 +1,11 @@
-import type { AnalysisResult, Bar, Bias, Range, SeriesPoint, Signal } from "./types";
+import type { AnalysisResult, Bar, Bias, DailyRange, SeriesPoint, Signal } from "./types";
 import { atr, bollinger, last, macd, rsi, sma, type Series } from "./indicators";
 import { findLevels } from "./levels";
 import { detectPatterns } from "./patterns";
 import { classifyTrend } from "./trend";
 
 /** Approximate US trading sessions per range. */
-export const RANGE_BARS: Record<Range, number> = {
+export const RANGE_BARS: Record<DailyRange, number> = {
   "3M": 63,
   "6M": 126,
   "1Y": 252,
@@ -16,19 +16,21 @@ export const RANGE_BARS: Record<Range, number> = {
 /** Extra history fetched so the 200-day average is valid from the first displayed bar. */
 export const WARMUP_BARS = 260;
 
-export function calendarDaysFor(range: Range): number {
+export function calendarDaysFor(range: DailyRange): number {
   // ~1.45 calendar days per trading session, plus warm-up.
   return Math.ceil((RANGE_BARS[range] + WARMUP_BARS) * 1.45) + 10;
 }
 
 /**
  * Turns raw daily bars into a full analysis. `bars` should include warm-up
- * history; only the last RANGE_BARS[range] are returned for display.
+ * history; only the last RANGE_BARS[range] are returned for display. Daily
+ * ranges only — intraday (1D/1W) charts bypass this entirely, see
+ * getIntradayChart in service.ts.
  */
 export function analyze(
   symbol: string,
   bars: Bar[],
-  range: Range,
+  range: DailyRange,
   provider: string,
 ): Omit<AnalysisResult, "aiSummary"> {
   if (bars.length < 30) {
