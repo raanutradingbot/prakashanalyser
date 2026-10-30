@@ -250,11 +250,12 @@ function rangeLabel(r: DailyRange) {
 
 function intradayNote(r: IntradayRange) {
   const span = {
-    "1D": "15-minute bars for the most recent trading session.",
     "15m": "15-minute bars for the last 2 trading sessions.",
     "30m": "30-minute bars for the last week.",
     "1H": "Hourly bars for the last month.",
     "4H": "4-hour bars for the last 3 months.",
+    "1D": "15-minute bars for the most recent trading session.",
+    "1W": "Hourly bars for the last week.",
   }[r];
   return `${span} Entry/SL/TP1-3 lines show the latest 5/13-EMA crossover signal on these bars, sized off ATR(14) — not a recommendation.`;
 }

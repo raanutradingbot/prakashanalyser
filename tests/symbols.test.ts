@@ -25,6 +25,7 @@ describe("parseRange", () => {
   });
   it("accepts the intraday ranges regardless of input casing", () => {
     expect(parseRange("1d")).toBe("1D");
+    expect(parseRange("1w")).toBe("1W");
     expect(parseRange("15m")).toBe("15m");
     expect(parseRange("15M")).toBe("15m");
     expect(parseRange("30m")).toBe("30m");
