@@ -23,9 +23,16 @@ describe("parseRange", () => {
     expect(parseRange("10Y")).toBe("1Y");
     expect(parseRange(null)).toBe("1Y");
   });
-  it("accepts the intraday ranges", () => {
-    expect(parseRange("1d")).toBe("1D");
-    expect(parseRange("1w")).toBe("1W");
+  it("accepts the intraday ranges regardless of input casing", () => {
+    expect(parseRange("15m")).toBe("15m");
+    expect(parseRange("15M")).toBe("15m");
+    expect(parseRange("30m")).toBe("30m");
+    expect(parseRange("1h")).toBe("1H");
+    expect(parseRange("4H")).toBe("4H");
+  });
+  it("doesn't confuse 3M (3 months) with 30m (30 minutes)", () => {
+    expect(parseRange("3m")).toBe("3M");
+    expect(parseRange("30m")).toBe("30m");
   });
 });
 
@@ -35,7 +42,7 @@ describe("toDailyRange", () => {
     expect(toDailyRange("5Y")).toBe("5Y");
   });
   it("clamps intraday ranges to a daily default", () => {
-    expect(toDailyRange("1D")).toBe("3M");
-    expect(toDailyRange("1W")).toBe("3M");
+    expect(toDailyRange("15m")).toBe("3M");
+    expect(toDailyRange("1H")).toBe("3M");
   });
 });

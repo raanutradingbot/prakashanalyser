@@ -103,14 +103,21 @@ export function generateBars(symbol: string, from: Date, to: Date): Bar[] {
   return bars;
 }
 
+const MINUTES_PER_BAR: Record<IntradayTimeframe, number> = {
+  "15Min": 15,
+  "30Min": 30,
+  "1Hour": 60,
+  "4Hour": 240,
+};
+
 /**
  * Synthetic intraday bars (market hours only, 9:30am-4:00pm ET) that glide
- * from each day's real (demo) open to its real (demo) close, so the 1D/1W
- * chart lines up with whatever the daily chart already shows for that day —
- * deterministic per symbol, same as generateBars.
+ * from each day's real (demo) open to its real (demo) close, so the
+ * intraday chart lines up with whatever the daily chart already shows for
+ * that day — deterministic per symbol, same as generateBars.
  */
 function generateIntradayBars(symbol: string, timeframe: IntradayTimeframe, from: Date, to: Date): Bar[] {
-  const minutesPerBar = timeframe === "15Min" ? 15 : 60;
+  const minutesPerBar = MINUTES_PER_BAR[timeframe];
   const barsPerDay = Math.ceil((6.5 * 60) / minutesPerBar); // 9:30-4:00 ET
   const dailyBuffer = new Date(from.getTime() - 3 * 86_400_000);
   const daily = generateBars(symbol, dailyBuffer, lastCompletedSession(to));

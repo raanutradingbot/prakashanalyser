@@ -12,14 +12,18 @@ export function normalizeSymbol(input: string): string | null {
   return US_TICKER.test(s) ? s : null;
 }
 
+/** Case-insensitive match against RANGES, returning the canonically-cased
+ *  value — ranges are a mix of cases ("15m", "1H", "3M") so a blind
+ *  .toUpperCase() would mangle "15m" into the non-existent "15M". */
 export function parseRange(input: string | null | undefined): Range {
-  const r = (input || "").toUpperCase();
-  return (RANGES as string[]).includes(r) ? (r as Range) : "1Y";
+  const raw = (input || "").trim().toLowerCase();
+  const match = RANGES.find((r) => r.toLowerCase() === raw);
+  return match ?? "1Y";
 }
 
 /** The trend analysis (verdict, signals, levels) always runs on daily data,
- *  even when the chart itself is showing an intraday (1D/1W) view — this
- *  picks the daily range to anchor it to in that case. */
+ *  even when the chart itself is showing an intraday view — this picks the
+ *  daily range to anchor it to in that case. */
 export function toDailyRange(range: Range): DailyRange {
   return isIntradayRange(range) ? "3M" : range;
 }

@@ -1,5 +1,5 @@
 import type { Bar, NewsItem, SymbolHit } from "../types";
-import { DataProviderError, SymbolNotFoundError, type IntradayTimeframe, type MarketDataProvider } from "./provider";
+import { DataProviderError, SymbolNotFoundError, type MarketDataProvider } from "./provider";
 import { searchSymbolIndex } from "./symbolIndex";
 import { toEasternDate, toInstant } from "./time";
 
@@ -76,9 +76,10 @@ export function alpacaProvider(): MarketDataProvider {
       return bars;
     },
 
-    async getIntradayBars(symbol, timeframe: IntradayTimeframe, from, to) {
-      const alpacaTimeframe = timeframe === "15Min" ? "15Min" : "1Hour";
-      const bars = await fetchBars(symbol, alpacaTimeframe, from, to, keyId, secret, feed, toInstant);
+    async getIntradayBars(symbol, timeframe, from, to) {
+      // IntradayTimeframe values ("15Min", "30Min", "1Hour", "4Hour") are
+      // already in Alpaca's own timeframe format — no mapping needed.
+      const bars = await fetchBars(symbol, timeframe, from, to, keyId, secret, feed, toInstant);
       if (bars.length === 0) throw new SymbolNotFoundError(symbol);
       return bars;
     },

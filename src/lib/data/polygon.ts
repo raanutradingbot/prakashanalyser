@@ -1,5 +1,5 @@
 import type { NewsItem, SymbolHit } from "../types";
-import { DataProviderError, SymbolNotFoundError, type IntradayTimeframe, type MarketDataProvider } from "./provider";
+import { DataProviderError, SymbolNotFoundError, type MarketDataProvider } from "./provider";
 import { toEasternDate, toInstant } from "./time";
 
 type PolygonAgg = { t: number; o: number; h: number; l: number; c: number; v: number };
@@ -62,8 +62,15 @@ export function polygonProvider(): MarketDataProvider {
       return bars;
     },
 
-    async getIntradayBars(symbol, timeframe: IntradayTimeframe, from, to) {
-      const [multiplier, timespan] = timeframe === "15Min" ? [15, "minute"] : [1, "hour"];
+    async getIntradayBars(symbol, timeframe, from, to) {
+      const [multiplier, timespan]: [number, string] =
+        timeframe === "15Min"
+          ? [15, "minute"]
+          : timeframe === "30Min"
+            ? [30, "minute"]
+            : timeframe === "1Hour"
+              ? [1, "hour"]
+              : [4, "hour"];
       const results = await fetchAggs(base, key, symbol, multiplier, timespan, from, to);
       const bars = results.map((b) => ({
         time: toInstant(new Date(b.t)),

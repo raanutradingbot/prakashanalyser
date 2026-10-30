@@ -39,7 +39,7 @@ Set `DATA_PROVIDER` in `.env.local`:
 
 All providers return split- and dividend-adjusted daily bars. The app fetches ~6.5 years once per ticker (cached for `CACHE_TTL_SECONDS`) so every chart range shares one request and the 200-day average is valid from the first visible bar.
 
-**Chart ranges, 1D to 5Y:** the price chart has seven range buttons — `1D` (15-minute bars, most recent session), `1W` (hourly bars, last 5 sessions), and the daily-bar ranges `3M`/`6M`/`1Y`/`2Y`/`5Y`. Only the chart switches resolution on 1D/1W; the trend verdict, signals, and support/resistance levels stay anchored to the daily dataset (3M) so they don't change just because you zoomed the chart in. Intraday bars come from a separate `getIntradayBars` provider method (`MarketDataProvider` in `src/lib/data/provider.ts`), cached briefly via `INTRADAY_CACHE_TTL_SECONDS` (default 60s) since intraday data goes stale fast. Demo mode generates synthetic intraday bars that glide between each day's real (demo) open and close, so the 1D/1W view lines up with whatever the daily chart already shows.
+**Chart ranges, 15 minutes to 5 years:** the price chart has nine range buttons — `15m`, `30m`, `1H`, `4H` (intraday) and `3M`/`6M`/`1Y`/`2Y`/`5Y` (daily bars). Only the chart switches resolution on the intraday ranges; the trend verdict, signals, and support/resistance levels stay anchored to the daily dataset (clamped to 3M) so they don't change just because you zoomed the chart in. Each intraday range pulls a sensible amount of history for its bar size (15m → last 2 sessions, 30m → last week, 1H → last month, 4H → last 3 months) via a separate `getIntradayBars` provider method (`MarketDataProvider` in `src/lib/data/provider.ts`), cached briefly via `INTRADAY_CACHE_TTL_SECONDS` (default 60s) since intraday data goes stale fast. Demo mode generates synthetic intraday bars that glide between each day's real (demo) open and close, so the intraday view lines up with whatever the daily chart already shows.
 
 **Latest news:** each ticker page shows the 5 most recent headlines (cached for `NEWS_CACHE_TTL_SECONDS`, default 900s). Alpaca and Polygon both return real headlines with a link to the source; demo mode shows clearly-labeled synthetic placeholders instead of real news.
 
@@ -61,13 +61,13 @@ Set `ANTHROPIC_API_KEY` (and optionally `AI_MODEL`, default `claude-sonnet-5-5`)
 GET /api/analyze?symbol=AAPL&range=1Y&ai=1
 ```
 
-`range` is one of `3M 6M 1Y 2Y 5Y` (default `1Y`) — this endpoint always returns the daily trend analysis; passing `1D`/`1W` here just falls back to `3M`. Returns the full `AnalysisResult` JSON (see `src/lib/types.ts`). Rate-limited per IP (`RATE_LIMIT_PER_MINUTE`, default 30). Errors are `{ "error": "..." }` with 400 (bad ticker), 404 (unknown ticker), 429, 503 or 500.
+`range` is one of `3M 6M 1Y 2Y 5Y` (default `1Y`) — this endpoint always returns the daily trend analysis; passing an intraday range here just falls back to `3M`. Returns the full `AnalysisResult` JSON (see `src/lib/types.ts`). Rate-limited per IP (`RATE_LIMIT_PER_MINUTE`, default 30). Errors are `{ "error": "..." }` with 400 (bad ticker), 404 (unknown ticker), 429, 503 or 500.
 
 ```
-GET /api/intraday?symbol=AAPL&range=1D
+GET /api/intraday?symbol=AAPL&range=15m
 ```
 
-`range` is `1D` or `1W`. Returns `{ symbol, range, bars }` — just the sub-daily OHLCV bars, no trend analysis. 501 if the configured provider doesn't support intraday bars.
+`range` is one of `15m 30m 1H 4H`. Returns `{ symbol, range, bars }` — just the sub-daily OHLCV bars, no trend analysis. 501 if the configured provider doesn't support intraday bars.
 
 ## How the trend score works
 

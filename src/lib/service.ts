@@ -1,7 +1,7 @@
 import "server-only";
 import type { AnalysisResult, Bar, DailyRange, IntradayRange, NewsItem } from "./types";
 import { analyze, calendarDaysFor } from "./analyze";
-import { getProvider, DataProviderError } from "./data";
+import { getProvider, DataProviderError, type IntradayTimeframe } from "./data";
 import { TtlCache } from "./cache";
 import { writeSummary } from "./ai";
 
@@ -57,10 +57,23 @@ export async function getAnalysis(
 }
 
 /**
- * Sub-daily bars for the 1D/1W chart views. "1D" returns just the most
- * recent trading session's bars; "1W" returns the last 5 trading days'. The
- * trend analysis itself (verdict, signals, levels) stays on the daily
- * dataset from getAnalysis — only the chart switches resolution here.
+ * Per-interval settings: which provider timeframe to request, how many
+ * recent trading sessions' worth of bars to actually show (scaled so the
+ * chart has a sensible number of bars — a few hundred, not a handful or
+ * several thousand), and a calendar-day buffer wide enough to guarantee
+ * that many sessions exist even across weekends/holidays.
+ */
+const INTRADAY_CONFIG: Record<IntradayRange, { timeframe: IntradayTimeframe; sessions: number; bufferDays: number }> = {
+  "15m": { timeframe: "15Min", sessions: 2, bufferDays: 5 },
+  "30m": { timeframe: "30Min", sessions: 5, bufferDays: 10 },
+  "1H": { timeframe: "1Hour", sessions: 20, bufferDays: 35 },
+  "4H": { timeframe: "4Hour", sessions: 60, bufferDays: 100 },
+};
+
+/**
+ * Sub-daily bars for the intraday chart views (15m/30m/1H/4H). The trend
+ * analysis itself (verdict, signals, levels) stays on the daily dataset
+ * from getAnalysis — only the chart switches resolution here.
  */
 export async function getIntradayChart(symbol: string, range: IntradayRange): Promise<Bar[]> {
   const provider = getProvider();
@@ -72,15 +85,12 @@ export async function getIntradayChart(symbol: string, range: IntradayRange): Pr
   const cached = intradayCache.get(key);
   if (cached) return cached;
 
-  const timeframe = range === "1D" ? "15Min" : "1Hour";
+  const { timeframe, sessions, bufferDays } = INTRADAY_CONFIG[range];
   const to = new Date();
-  // Buffer wide enough to guarantee a full session/week even across
-  // weekends and holidays; trimmed down to the actual requested window below.
-  const bufferDays = range === "1D" ? 5 : 12;
   const from = new Date(to.getTime() - bufferDays * 86_400_000);
 
   const bars = await provider.getIntradayBars(symbol, timeframe, from, to);
-  const trimmed = trimToRecentSessions(bars, range === "1D" ? 1 : 5);
+  const trimmed = trimToRecentSessions(bars, sessions);
   intradayCache.set(key, trimmed);
   return trimmed;
 }

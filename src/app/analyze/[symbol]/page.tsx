@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getAnalysis, getIntradayChart } from "@/lib/service";
 import { normalizeSymbol, parseRange, toDailyRange } from "@/lib/symbols";
-import { isIntradayRange, RANGES, type AnalysisResult, type DailyRange, type Range } from "@/lib/types";
+import { isIntradayRange, RANGES, type AnalysisResult, type DailyRange, type IntradayRange, type Range } from "@/lib/types";
 import { DataProviderError } from "@/lib/data";
 import { AnalysisError } from "@/lib/analyze";
 import { aiEnabled } from "@/lib/ai";
@@ -135,11 +135,7 @@ export default async function AnalyzePage({ params, searchParams }: { params: Pa
           <ChartSection symbol={r.symbol} range={range} daily={r} />
         </Suspense>
         <p className="chart-note">
-          {intraday
-            ? range === "1D"
-              ? "15-minute bars for the most recent trading session."
-              : "Hourly bars for the last 5 trading sessions."
-            : "Lower pane: RSI (14) with 70 and 30 marked. Arrows mark candlestick patterns."}
+          {intraday ? intradayNote(range) : "Lower pane: RSI (14) with 70 and 30 marked. Arrows mark candlestick patterns."}
         </p>
       </section>
 
@@ -188,7 +184,7 @@ async function ChartSection({ symbol, range, daily }: { symbol: string; range: R
     if (bars.length === 0) {
       return (
         <div className="chart-box chart-box-loading">
-          <p className="empty">No intraday data available right now{range === "1D" ? " for today" : " for this week"}.</p>
+          <p className="empty">No intraday data available right now.</p>
         </div>
       );
     }
@@ -235,4 +231,13 @@ function Problem({ title, children }: { title: string; children: React.ReactNode
 
 function rangeLabel(r: DailyRange) {
   return { "3M": "3 months", "6M": "6 months", "1Y": "1 year", "2Y": "2 years", "5Y": "5 years" }[r];
+}
+
+function intradayNote(r: IntradayRange) {
+  return {
+    "15m": "15-minute bars for the last 2 trading sessions.",
+    "30m": "30-minute bars for the last week.",
+    "1H": "Hourly bars for the last month.",
+    "4H": "4-hour bars for the last 3 months.",
+  }[r];
 }
