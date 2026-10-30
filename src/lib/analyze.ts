@@ -3,6 +3,7 @@ import { atr, bollinger, last, macd, rsi, sma, type Series } from "./indicators"
 import { findLevels } from "./levels";
 import { detectPatterns } from "./patterns";
 import { classifyTrend } from "./trend";
+import { findLatestTpSlSignal } from "./tpsl";
 
 /** Approximate US trading sessions per range. */
 export const RANGE_BARS: Record<DailyRange, number> = {
@@ -74,6 +75,7 @@ export function analyze(
   const levelBars = bars.slice(-Math.max(displayCount, 126));
   const levels = findLevels(levelBars, { atr: atrNow });
   const patterns = detectPatterns(bars, 20);
+  const tpSl = findLatestTpSlSignal(bars);
 
   const yearBars = bars.slice(-252);
   const high52w = yearBars.length >= 200 ? Math.max(...yearBars.map((b) => b.high)) : null;
@@ -128,6 +130,7 @@ export function analyze(
     bars: displayBars,
     overlays: { sma20: toPoints(sma20), sma50: toPoints(sma50), sma200: toPoints(sma200) },
     rsi: toPoints(rsi14),
+    tpSl,
   };
 }
 

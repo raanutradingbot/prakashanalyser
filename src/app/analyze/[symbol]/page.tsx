@@ -121,6 +121,10 @@ export default async function AnalyzePage({ params, searchParams }: { params: Pa
                 <i className="dash" />
                 Support and resistance
               </span>
+              <span>
+                <i style={{ background: "var(--up)" }} />
+                TP/SL signal
+              </span>
             </div>
           )}
         </div>
@@ -135,7 +139,9 @@ export default async function AnalyzePage({ params, searchParams }: { params: Pa
           <ChartSection symbol={r.symbol} range={range} daily={r} />
         </Suspense>
         <p className="chart-note">
-          {intraday ? intradayNote(range) : "Lower pane: RSI (14) with 70 and 30 marked. Arrows mark candlestick patterns."}
+          {intraday
+            ? intradayNote(range)
+            : "Lower pane: RSI (14) with 70 and 30 marked. Arrows mark candlestick patterns. Entry/SL/TP1-3 lines show the latest 5/13-EMA crossover signal, sized off ATR(14) — not a recommendation, just where that rule-based signal and its risk levels currently sit."}
         </p>
       </section>
 
@@ -177,7 +183,16 @@ export default async function AnalyzePage({ params, searchParams }: { params: Pa
 
 async function ChartSection({ symbol, range, daily }: { symbol: string; range: Range; daily: AnalysisResult }) {
   if (!isIntradayRange(range)) {
-    return <PriceChart bars={daily.bars} overlays={daily.overlays} rsi={daily.rsi} levels={daily.levels} patterns={daily.patterns} />;
+    return (
+      <PriceChart
+        bars={daily.bars}
+        overlays={daily.overlays}
+        rsi={daily.rsi}
+        levels={daily.levels}
+        patterns={daily.patterns}
+        tpSl={daily.tpSl}
+      />
+    );
   }
   try {
     const bars = await getIntradayChart(symbol, range);

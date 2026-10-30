@@ -76,6 +76,21 @@ export interface SeriesPoint {
   value: number;
 }
 
+/** Latest buy/sell EMA-crossover signal with ATR-based TP/SL levels. See src/lib/tpsl.ts. */
+export interface TpSlSignal {
+  direction: "buy" | "sell";
+  time: string;
+  entry: number;
+  sl: number;
+  tp1: number;
+  tp2: number;
+  tp3: number;
+  tp1Hit: boolean;
+  tp2Hit: boolean;
+  tp3Hit: boolean;
+  slHit: boolean;
+}
+
 export interface AnalysisResult {
   symbol: string;
   range: DailyRange;
@@ -99,6 +114,7 @@ export interface AnalysisResult {
     sma200: SeriesPoint[];
   };
   rsi: SeriesPoint[];
+  tpSl: TpSlSignal | null;
   aiSummary?: string | null;
   news?: NewsItem[] | null;
 }

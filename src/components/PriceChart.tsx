@@ -18,7 +18,7 @@ import {
 import type { AnalysisResult } from "@/lib/types";
 
 type Props = Pick<AnalysisResult, "bars"> &
-  Partial<Pick<AnalysisResult, "overlays" | "rsi" | "levels" | "patterns">> & {
+  Partial<Pick<AnalysisResult, "overlays" | "rsi" | "levels" | "patterns" | "tpSl">> & {
     /** True for the 1D/1W intraday views: shows time-of-day on the x-axis, skips the
      *  daily-only indicators (SMA overlays, RSI, support/resistance, patterns). */
     intraday?: boolean;
@@ -46,7 +46,7 @@ function toChartTime(s: string): Time {
  * Candles + volume, and — for daily ranges only — 20/50/200-day averages,
  * support/resistance lines, pattern markers, and an RSI pane underneath.
  */
-export function PriceChart({ bars, overlays, rsi, levels, patterns, intraday = false }: Props) {
+export function PriceChart({ bars, overlays, rsi, levels, patterns, tpSl, intraday = false }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -143,18 +143,66 @@ export function PriceChart({ bars, overlays, rsi, levels, patterns, intraday = f
         });
       }
 
+      const shownTimes = new Set(bars.map((b) => b.time));
+      const markers: SeriesMarker<Time>[] = [];
       if (patterns && patterns.length > 0) {
-        const shown = new Set(bars.map((b) => b.time));
-        const markers: SeriesMarker<Time>[] = patterns
-          .filter((p) => shown.has(p.time))
-          .map((p): SeriesMarker<Time> => ({
-            time: toChartTime(p.time),
-            position: p.bias === "bearish" ? "aboveBar" : "belowBar",
-            shape: p.bias === "bullish" ? "arrowUp" : p.bias === "bearish" ? "arrowDown" : "circle",
-            color: p.bias === "bullish" ? c.up : p.bias === "bearish" ? c.down : c.flat,
-          }))
-          .sort((a, b) => (a.time < b.time ? -1 : 1));
-        createSeriesMarkers(candles, markers);
+        markers.push(
+          ...patterns
+            .filter((p) => shownTimes.has(p.time))
+            .map((p): SeriesMarker<Time> => ({
+              time: toChartTime(p.time),
+              position: p.bias === "bearish" ? "aboveBar" : "belowBar",
+              shape: p.bias === "bullish" ? "arrowUp" : p.bias === "bearish" ? "arrowDown" : "circle",
+              color: p.bias === "bullish" ? c.up : p.bias === "bearish" ? c.down : c.flat,
+            })),
+        );
+      }
+      if (tpSl && shownTimes.has(tpSl.time)) {
+        markers.push({
+          time: toChartTime(tpSl.time),
+          position: tpSl.direction === "buy" ? "belowBar" : "aboveBar",
+          shape: tpSl.direction === "buy" ? "arrowUp" : "arrowDown",
+          color: tpSl.direction === "buy" ? c.up : c.down,
+          text: tpSl.direction === "buy" ? "BUY" : "SELL",
+        });
+      }
+      if (markers.length > 0) {
+        createSeriesMarkers(
+          candles,
+          markers.sort((a, b) => (a.time < b.time ? -1 : 1)),
+        );
+      }
+
+      if (tpSl) {
+        const tpLine = (price: number, title: string, hit: boolean, width: 1 | 2, dashed: boolean) => {
+          candles.createPriceLine({
+            price,
+            color: alpha(c.up, hit ? 0.95 : 0.6),
+            lineWidth: width,
+            lineStyle: hit ? LineStyle.Solid : dashed ? LineStyle.Dashed : LineStyle.Solid,
+            axisLabelVisible: true,
+            title: hit ? `${title} ✓` : title,
+          });
+        };
+        candles.createPriceLine({
+          price: tpSl.entry,
+          color: alpha(c.ink2, 0.9),
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: "Entry",
+        });
+        candles.createPriceLine({
+          price: tpSl.sl,
+          color: alpha(c.down, tpSl.slHit ? 0.9 : 0.7),
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: tpSl.slHit ? "SL ✕" : "SL",
+        });
+        tpLine(tpSl.tp1, "TP1", tpSl.tp1Hit, 1, true);
+        tpLine(tpSl.tp2, "TP2", tpSl.tp2Hit, 1, true);
+        tpLine(tpSl.tp3, "TP3", tpSl.tp3Hit, 2, false);
       }
 
       if (rsi && rsi.length > 0) {
@@ -183,7 +231,7 @@ export function PriceChart({ bars, overlays, rsi, levels, patterns, intraday = f
       mq.removeEventListener("change", build);
       chart?.remove();
     };
-  }, [bars, overlays, rsi, levels, patterns, intraday]);
+  }, [bars, overlays, rsi, levels, patterns, tpSl, intraday]);
 
   return (
     <div
